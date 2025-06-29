@@ -212,7 +212,7 @@ update msg model =
                                         Revealed Bomb
 
                                     Hidden _ ->
-                                        Revealed Bomb
+                                        Hidden Bomb
 
                             else
                                 tile
