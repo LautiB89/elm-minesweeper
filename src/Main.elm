@@ -4,9 +4,9 @@ import Browser
 import Browser.Dom as Dom
 import Browser.Events exposing (onClick)
 import Debug exposing (toString)
-import Html exposing (Html, div)
+import Html exposing (Html)
 import Json.Decode
-import List exposing (concat, filter, foldr, indexedMap, length, member, repeat)
+import List exposing (concat, indexedMap, member, repeat)
 import Random
 import String exposing (fromFloat)
 import Svg exposing (..)
@@ -40,6 +40,10 @@ type alias Screen =
 
 type alias Model =
     { tiles : TileMap, screen : Screen, bombs : List Position }
+
+
+
+-- INIT
 
 
 init : Model
@@ -99,6 +103,10 @@ type Msg
     | GeneratedBombs (List ( Int, Int ))
 
 
+
+-- VIEW
+
+
 baseTile : Position -> String -> Svg msg
 baseTile (Pos xPos yPos) colorStr =
     let
@@ -117,10 +125,7 @@ baseTile (Pos xPos yPos) colorStr =
 
 neighbours : Position -> List Position
 neighbours (Pos x y) =
-    List.concatMap
-        (\n ->
-            List.map (\m -> Pos (x + n) (y + m)) [ -1, 0, 1 ]
-        )
+    List.concatMap (\n -> List.map (\m -> Pos (x + n) (y + m)) [ -1, 0, 1 ])
         [ -1, 0, 1 ]
 
 
@@ -147,15 +152,18 @@ viewTile tile bombs tilePosition screenPosition =
                     baseTile screenPosition "red"
 
                 Empty ->
-                    g [] [ baseTile screenPosition "grey", tileBombCount tilePosition screenPosition bombs ]
+                    g []
+                        [ baseTile screenPosition "grey"
+                        , tileBombCount tilePosition screenPosition bombs
+                        ]
 
         Hidden _ ->
             baseTile screenPosition "darkGrey"
 
 
 tileToScreenPosition : Float -> Float -> Float
-tileToScreenPosition k aux =
-    k * (tileSize + tileSpacing) + ((aux / 2) - ((defaultSize / 2) * (tileSize + tileSpacing)))
+tileToScreenPosition k screenSize =
+    k * (tileSize + tileSpacing) + ((screenSize / 2) - ((defaultSize / 2) * (tileSize + tileSpacing)))
 
 
 viewTileAt : Model -> Position -> Tile -> Svg Msg
@@ -167,11 +175,6 @@ viewTileAt { screen, bombs } (Pos i j) tile =
             (tileToScreenPosition i screen.width)
             (tileToScreenPosition j screen.height)
         )
-
-
-viewTiles : Model -> List (Svg Msg)
-viewTiles model =
-    concat (tilesIndexedMap (\p tile -> viewTileAt model p tile) model.tiles)
 
 
 view : Model -> Html Msg
@@ -186,7 +189,7 @@ view model =
         , width "100%"
         , height "100%"
         ]
-        (viewTiles model)
+        (concat (tilesIndexedMap (viewTileAt model) model.tiles))
 
 
 tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
@@ -194,17 +197,17 @@ tilesIndexedMap f tileMap =
     indexedMap (\x tiles -> indexedMap (\y -> f (Pos (toFloat x) (toFloat y))) tiles) tileMap
 
 
-isHoveringTile : Screen -> Position -> Position -> Bool
-isHoveringTile screen (Pos mouseX mouseY) (Pos tileX tileY) =
+coordIsHoveringTile : Float -> Float -> Int -> Bool
+coordIsHoveringTile aux mouseCoordinate tileCoordinate =
     let
-        screenX =
-            tileToScreenPosition tileX screen.width
-
-        screenY =
-            tileToScreenPosition tileY screen.height
+        screenCoordinate =
+            tileToScreenPosition (toFloat tileCoordinate) aux
     in
-    ((screenX <= mouseX) && (mouseX < (screenX + tileSize)))
-        && ((screenY <= mouseY) && (mouseY < (screenY + tileSize)))
+    (screenCoordinate <= mouseCoordinate) && (mouseCoordinate < (screenCoordinate + tileSize))
+
+
+
+-- UPDATE
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -213,18 +216,26 @@ update msg model =
         MouseClick mouseX mouseY ->
             { model
                 | tiles =
-                    tilesIndexedMap
-                        (\pos tile ->
-                            case tile of
-                                Revealed _ ->
-                                    tile
+                    indexedMap
+                        (\x tiles ->
+                            if coordIsHoveringTile model.screen.width mouseX x then
+                                indexedMap
+                                    (\y tile ->
+                                        case tile of
+                                            Revealed _ ->
+                                                tile
 
-                                Hidden c ->
-                                    if isHoveringTile model.screen (Pos mouseX mouseY) pos then
-                                        Revealed c
+                                            Hidden c ->
+                                                if coordIsHoveringTile model.screen.height mouseY y then
+                                                    Revealed c
 
-                                    else
-                                        tile
+                                                else
+                                                    tile
+                                    )
+                                    tiles
+
+                            else
+                                tiles
                         )
                         model.tiles
             }
@@ -253,6 +264,10 @@ update msg model =
             }
     , Cmd.none
     )
+
+
+
+-- SUBSCRIPTIONS
 
 
 subscriptions : Model -> Sub Msg
