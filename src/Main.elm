@@ -33,15 +33,18 @@ defaultBombCount =
     5
 
 
+type alias Screen =
+    { height : Float, width : Float }
+
+
 type alias Model =
-    { tiles : TileMap, screenWidth : Float, screenHeight : Float }
+    { tiles : TileMap, screen : Screen }
 
 
 init : Model
 init =
     { tiles = repeat defaultSize (repeat defaultSize (Hidden Empty))
-    , screenHeight = 0
-    , screenWidth = 0
+    , screen = { height = 0, width = 0 }
     }
 
 
@@ -109,25 +112,33 @@ viewTile tile position =
             baseTile position "darkGrey"
 
 
-
 screenPosition : Float -> Float -> Float
 screenPosition k aux =
     k * (tileSize + tileSpacing) + ((aux / 2) - ((defaultSize / 2) * (tileSize + tileSpacing)))
 
 
-viewTileAt : Model -> Position -> Tile -> Svg Msg
-viewTileAt model (Pos i j) tile =
-    viewTile tile (Pos (screenPosition i model.screenWidth) (screenPosition j model.screenHeight))
+viewTileAt : Screen -> Position -> Tile -> Svg Msg
+viewTileAt screen (Pos i j) tile =
+    viewTile tile
+        (Pos
+            (screenPosition i screen.width)
+            (screenPosition j screen.height)
+        )
 
 
 view : Model -> Html Msg
-view model =
+view { screen, tiles } =
     svg
-        [ viewBox ("0 0 " ++ String.fromFloat model.screenWidth ++ " " ++ String.fromFloat model.screenHeight)
+        [ viewBox
+            ("0 0 "
+                ++ String.fromFloat screen.width
+                ++ " "
+                ++ String.fromFloat screen.height
+            )
         , width "100%"
         , height "100%"
         ]
-        (concat (tilesIndexedMap (\p tile -> viewTileAt model p tile) model.tiles))
+        (concat (tilesIndexedMap (\p tile -> viewTileAt screen p tile) tiles))
 
 
 tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
@@ -135,14 +146,14 @@ tilesIndexedMap f tileMap =
     indexedMap (\x tiles -> indexedMap (\y -> f (Pos (toFloat x) (toFloat y))) tiles) tileMap
 
 
-isHoveringTile : Model -> Position -> Position -> Bool
-isHoveringTile model (Pos mouseX mouseY) (Pos tileX tileY) =
+isHoveringTile : Screen -> Position -> Position -> Bool
+isHoveringTile screen (Pos mouseX mouseY) (Pos tileX tileY) =
     let
         screenX =
-            screenPosition tileX model.screenWidth
+            screenPosition tileX screen.width
 
         screenY =
-            screenPosition tileY model.screenHeight
+            screenPosition tileY screen.height
     in
     ((screenX <= mouseX) && (mouseX < (screenX + tileSize)))
         && ((screenY <= mouseY) && (mouseY < (screenY + tileSize)))
@@ -161,7 +172,7 @@ update msg model =
                                     tile
 
                                 Hidden c ->
-                                    if isHoveringTile model (Pos mouseX mouseY) pos then
+                                    if isHoveringTile model.screen (Pos mouseX mouseY) pos then
                                         Revealed c
 
                                     else
@@ -171,10 +182,7 @@ update msg model =
             }
 
         GotViewport { viewport } ->
-            { model
-                | screenHeight = viewport.height
-                , screenWidth = viewport.width
-            }
+            { model | screen = { height = viewport.height, width = viewport.width } }
     , Cmd.none
     )
 
