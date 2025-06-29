@@ -1,20 +1,25 @@
 module Main exposing (..)
 
-import Debug exposing (toString)
+import Svg exposing (..)
+import Svg.Attributes exposing (..)
 import List exposing (concat, indexedMap, repeat)
-import Playground exposing (..)
 import String exposing (fromInt)
-
+import Browser
+import Html exposing (Html)
+import Html exposing (div)
 
 defaultSize : number
 defaultSize =
-    20
+    10
 
 
 tileSize : number
 tileSize =
     40
 
+tileSpacing : number
+tileSpacing =
+    3
 
 defaultBombCount : number
 defaultBombCount =
@@ -29,9 +34,13 @@ initialModel : Model
 initialModel =
     { tiles = repeat defaultSize (repeat defaultSize (Hidden Empty)) }
 
-
 main =
-    game view update initialModel
+      Browser.document
+    { init = initialModel
+    , view = view
+    , update = update
+    , subscriptions = \_ -> {}
+    }
 
 
 type TileContent
@@ -47,13 +56,22 @@ type Tile
 type alias TileMap =
     List (List Tile)
 
-
-viewTile : Tile -> Shape
-viewTile tile =
+type Msg = Alo
+viewTile : Tile -> (Int, Int) -> Svg
+viewTile tile (xPos, yPos) =
     case tile of
         Revealed content ->
             case content of
                 Bomb ->
+                    rect
+                        [ x xPos
+                        , y yPos
+                        , width tileSize
+                        , height tileSize
+                        , rx "15"
+                        , ry "15"
+                        ]
+                        []
                     square black 40
 
                 Empty ->
@@ -68,19 +86,17 @@ viewTile tile =
 
 viewTileAt : Int -> Int -> Tile -> Shape
 viewTileAt i j tile =
-    viewTile tile
-        |> move (screenPosition i) (screenPosition j)
+    viewTile tile (screenPosition i) (screenPosition j)
 
 
 screenPosition : Int -> Float
 screenPosition k =
-    toFloat (((defaultSize // 2) - k) * (tileSize + 5))
+    toFloat (((defaultSize // 2) - k) * (tileSize + tileSpacing))
 
 
-view : Computer -> Model -> List Shape
-view computer model =
-    (words black (toString computer.mouse.x) |> move -300 -100)
-        :: concat (tilesIndexedMap (\x y tile -> viewTileAt x y tile) model.tiles)
+view : Model -> Html msg
+view model =
+    svg (concat (tilesIndexedMap (\x y tile -> viewTileAt x y tile) model.tiles))
 
 
 tilesIndexedMap : (Int -> Int -> Tile -> b) -> TileMap -> List (List b)
@@ -88,31 +104,25 @@ tilesIndexedMap f tileMap =
     indexedMap (\x tiles -> indexedMap (f x) tiles) tileMap
 
 
-isHoveringTile : ( Float, Float ) -> ( Int, Int ) -> Bool
-isHoveringTile ( x, y ) ( tileX, tileY ) =
+isHoveringTile : Mouse -> ( Int, Int ) -> Bool
+isHoveringTile mouse ( tileX, tileY ) =
     let
+
+        mouseX = mouse.x
+
+        mouseY = mouse.y
         screenX =
             screenPosition tileX
 
         screenY =
             screenPosition tileY
     in
-    (((screenX - (tileSize / 2)) < x) && (x < (screenX + (tileSize / 2))))
-        && (((screenY - (tileSize / 2)) < y) && (y < (screenY + (tileSize / 2))))
+    (((screenX - (tileSize / 2)) < mouseX) && (mouseX < (screenX + (tileSize / 2))))
+        && (((screenY - (tileSize / 2)) < mouseY) && (mouseY < (screenY + (tileSize / 2))))
 
 
 update : Computer -> Model -> Model
 update computer memory =
-    let
-        clicked =
-            computer.mouse.click
-
-        mouseX =
-            computer.mouse.x
-
-        mouseY =
-            computer.mouse.y
-    in
     { tiles =
         tilesIndexedMap
             (\x y tile ->
@@ -121,8 +131,8 @@ update computer memory =
                         tile
 
                     Hidden c ->
-                        if clicked && isHoveringTile ( mouseX, mouseY ) ( x, y ) then
-                            Debug.log "Probar" (Revealed c)
+                        if computer.mouse.click && isHoveringTile computer.mouse ( x, y ) then
+                            Revealed c
 
                         else
                             tile
