@@ -6,7 +6,8 @@ import Browser.Events exposing (onClick)
 import Debug exposing (toString)
 import Html exposing (Html, div)
 import Json.Decode
-import List exposing (concat, indexedMap, repeat)
+import List exposing (concat, indexedMap, member, repeat)
+import Random
 import String exposing (fromFloat)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
@@ -48,10 +49,25 @@ init =
     }
 
 
+bombsGenerator : Random.Generator (List ( Int, Int ))
+bombsGenerator =
+    Random.list defaultBombCount
+        (Random.pair (Random.int 1 defaultSize)
+            (Random.int 1 defaultSize)
+        )
+
+
 main : Program () Model Msg
 main =
     Browser.element
-        { init = \_ -> ( init, Task.perform GotViewport Dom.getViewport )
+        { init =
+            \_ ->
+                ( init
+                , Cmd.batch
+                    [ Task.perform GotViewport Dom.getViewport
+                    , Random.generate GeneratedBombs bombsGenerator
+                    ]
+                )
         , view = view
         , update = update
         , subscriptions = subscriptions
@@ -79,6 +95,7 @@ type alias TileMap =
 type Msg
     = MouseClick Float Float
     | GotViewport Dom.Viewport
+    | GeneratedBombs (List ( Int, Int ))
 
 
 baseTile : Position -> String -> Svg msg
@@ -183,6 +200,25 @@ update msg model =
 
         GotViewport { viewport } ->
             { model | screen = { height = viewport.height, width = viewport.width } }
+
+        GeneratedBombs bombs ->
+            { model
+                | tiles =
+                    tilesIndexedMap
+                        (\(Pos x y) tile ->
+                            if member ( round x, round y ) bombs then
+                                case tile of
+                                    Revealed _ ->
+                                        Revealed Bomb
+
+                                    Hidden _ ->
+                                        Revealed Bomb
+
+                            else
+                                tile
+                        )
+                        model.tiles
+            }
     , Cmd.none
     )
 
