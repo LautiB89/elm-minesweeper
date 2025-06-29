@@ -1,12 +1,15 @@
 module Main exposing (..)
 
+import Browser
+import Browser.Events exposing (onClick)
+import Debug exposing (toString)
+import Html exposing (Html, div)
+import Json.Decode as D
+import List exposing (concat, indexedMap, repeat)
+import String exposing (fromFloat, fromInt)
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
-import List exposing (concat, indexedMap, repeat)
-import String exposing (fromInt)
-import Browser
-import Html exposing (Html)
-import Html exposing (div)
+
 
 defaultSize : number
 defaultSize =
@@ -17,9 +20,11 @@ tileSize : number
 tileSize =
     40
 
+
 tileSpacing : number
 tileSpacing =
     3
+
 
 defaultBombCount : number
 defaultBombCount =
@@ -34,18 +39,24 @@ initialModel : Model
 initialModel =
     { tiles = repeat defaultSize (repeat defaultSize (Hidden Empty)) }
 
+
+main : Program () Model Msg
 main =
-      Browser.document
-    { init = initialModel
-    , view = view
-    , update = update
-    , subscriptions = \_ -> {}
-    }
+    Browser.element
+        { init = \_ -> ( initialModel, Cmd.none )
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
 
 
 type TileContent
     = Bomb
     | Empty
+
+
+type Position
+    = Pos Float Float
 
 
 type Tile
@@ -56,86 +67,103 @@ type Tile
 type alias TileMap =
     List (List Tile)
 
-type Msg = Alo
-viewTile : Tile -> (Int, Int) -> Svg
-viewTile tile (xPos, yPos) =
+
+type Msg
+    = MouseClick Float Float
+
+
+baseTile : Position -> String -> Svg msg
+baseTile (Pos xPos yPos) colorStr =
+    let
+        sTileSize =
+            fromFloat tileSize
+    in
+    rect
+        [ x (fromFloat xPos)
+        , y (fromFloat yPos)
+        , width sTileSize
+        , height sTileSize
+        , fill colorStr
+        ]
+        []
+
+
+viewTile : Tile -> Position -> Svg Msg
+viewTile tile position =
     case tile of
         Revealed content ->
             case content of
                 Bomb ->
-                    rect
-                        [ x xPos
-                        , y yPos
-                        , width tileSize
-                        , height tileSize
-                        , rx "15"
-                        , ry "15"
-                        ]
-                        []
-                    square black 40
+                    baseTile position "red"
 
                 Empty ->
-                    group
-                        [ square grey 40
-                        , words black (fromInt 1)
-                        ]
+                    baseTile position "grey"
 
         Hidden _ ->
-            square darkGrey 40
+            baseTile position "darkGrey"
 
 
-viewTileAt : Int -> Int -> Tile -> Shape
-viewTileAt i j tile =
-    viewTile tile (screenPosition i) (screenPosition j)
+viewTileAt : Position -> Tile -> Svg Msg
+viewTileAt (Pos i j) tile =
+    viewTile tile (Pos (screenPosition i) (screenPosition j))
 
 
-screenPosition : Int -> Float
+screenPosition : Float -> Float
 screenPosition k =
-    toFloat (((defaultSize // 2) - k) * (tileSize + tileSpacing))
+    k * (tileSize + tileSpacing)
 
 
-view : Model -> Html msg
+view : Model -> Html Msg
 view model =
-    svg (concat (tilesIndexedMap (\x y tile -> viewTileAt x y tile) model.tiles))
+    svg
+        [ width (fromFloat (defaultSize * (tileSize + tileSpacing)))
+        , height (fromFloat (defaultSize * (tileSize + tileSpacing)))
+        ]
+        (concat (tilesIndexedMap (\p tile -> viewTileAt p tile) model.tiles))
 
 
-tilesIndexedMap : (Int -> Int -> Tile -> b) -> TileMap -> List (List b)
+tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
 tilesIndexedMap f tileMap =
-    indexedMap (\x tiles -> indexedMap (f x) tiles) tileMap
+    indexedMap (\x tiles -> indexedMap (\y -> f (Pos (toFloat x) (toFloat y))) tiles) tileMap
 
 
-isHoveringTile : Mouse -> ( Int, Int ) -> Bool
-isHoveringTile mouse ( tileX, tileY ) =
+isHoveringTile : Position -> Position -> Bool
+isHoveringTile (Pos mouseX mouseY) (Pos tileX tileY) =
     let
-
-        mouseX = mouse.x
-
-        mouseY = mouse.y
         screenX =
             screenPosition tileX
 
         screenY =
             screenPosition tileY
     in
-    (((screenX - (tileSize / 2)) < mouseX) && (mouseX < (screenX + (tileSize / 2))))
-        && (((screenY - (tileSize / 2)) < mouseY) && (mouseY < (screenY + (tileSize / 2))))
+    ((screenX <= mouseX) && (mouseX < (screenX + tileSize)))
+        && ((screenY <= mouseY) && (mouseY < (screenY + tileSize)))
 
 
-update : Computer -> Model -> Model
-update computer memory =
-    { tiles =
-        tilesIndexedMap
-            (\x y tile ->
-                case tile of
-                    Revealed _ ->
-                        tile
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    ( case msg of
+        MouseClick mouseX mouseY ->
+            { tiles =
+                tilesIndexedMap
+                    (\pos tile ->
+                        case tile of
+                            Revealed _ ->
+                                tile
 
-                    Hidden c ->
-                        if computer.mouse.click && isHoveringTile computer.mouse ( x, y ) then
-                            Revealed c
+                            Hidden c ->
+                                if isHoveringTile (Pos mouseX mouseY) pos then
+                                    Revealed c
 
-                        else
-                            tile
-            )
-            memory.tiles
-    }
+                                else
+                                    tile
+                    )
+                    model.tiles
+            }
+    , Cmd.none
+    )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    onClick (D.map2 MouseClick (D.field "pageX" D.float) (D.field "pageY" D.float))
