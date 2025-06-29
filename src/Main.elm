@@ -6,7 +6,7 @@ import Browser.Events exposing (onClick)
 import Debug exposing (toString)
 import Html exposing (Html, div)
 import Json.Decode
-import List exposing (concat, indexedMap, member, repeat)
+import List exposing (concat, filter, foldr, indexedMap, length, member, repeat)
 import Random
 import String exposing (fromFloat)
 import Svg exposing (..)
@@ -31,7 +31,7 @@ tileSpacing =
 
 defaultBombCount : number
 defaultBombCount =
-    5
+    20
 
 
 type alias Screen =
@@ -39,12 +39,13 @@ type alias Screen =
 
 
 type alias Model =
-    { tiles : TileMap, screen : Screen }
+    { tiles : TileMap, screen : Screen, bombs : List Position }
 
 
 init : Model
 init =
     { tiles = repeat defaultSize (repeat defaultSize (Hidden Empty))
+    , bombs = []
     , screen = { height = 0, width = 0 }
     }
 
@@ -114,48 +115,78 @@ baseTile (Pos xPos yPos) colorStr =
         []
 
 
-viewTile : Tile -> Position -> Svg Msg
-viewTile tile position =
+neighbours : Position -> List Position
+neighbours (Pos x y) =
+    List.concatMap
+        (\n ->
+            List.map (\m -> Pos (x + n) (y + m)) [ -1, 0, 1 ]
+        )
+        [ -1, 0, 1 ]
+
+
+tileBombCount : Position -> Position -> List Position -> Svg Msg
+tileBombCount tilePosition (Pos screenXPos screenYPos) bombs =
+    text_
+        [ x (String.fromFloat (screenXPos + (tileSize / 2)))
+        , y (String.fromFloat (screenYPos + (tileSize / 2)))
+        , textAnchor "middle"
+        , dominantBaseline "central"
+        , fontSize "16"
+        , fontFamily "monospace"
+        , fill "white"
+        ]
+        [ text (String.fromInt (List.length (List.filter (\p -> member p bombs) (neighbours tilePosition)))) ]
+
+
+viewTile : Tile -> List Position -> Position -> Position -> Svg Msg
+viewTile tile bombs tilePosition screenPosition =
     case tile of
         Revealed content ->
             case content of
                 Bomb ->
-                    baseTile position "red"
+                    baseTile screenPosition "red"
 
                 Empty ->
-                    baseTile position "grey"
+                    g [] [ baseTile screenPosition "grey", tileBombCount tilePosition screenPosition bombs ]
 
         Hidden _ ->
-            baseTile position "darkGrey"
+            baseTile screenPosition "darkGrey"
 
 
-screenPosition : Float -> Float -> Float
-screenPosition k aux =
+tileToScreenPosition : Float -> Float -> Float
+tileToScreenPosition k aux =
     k * (tileSize + tileSpacing) + ((aux / 2) - ((defaultSize / 2) * (tileSize + tileSpacing)))
 
 
-viewTileAt : Screen -> Position -> Tile -> Svg Msg
-viewTileAt screen (Pos i j) tile =
+viewTileAt : Model -> Position -> Tile -> Svg Msg
+viewTileAt { screen, bombs } (Pos i j) tile =
     viewTile tile
+        bombs
+        (Pos i j)
         (Pos
-            (screenPosition i screen.width)
-            (screenPosition j screen.height)
+            (tileToScreenPosition i screen.width)
+            (tileToScreenPosition j screen.height)
         )
 
 
+viewTiles : Model -> List (Svg Msg)
+viewTiles model =
+    concat (tilesIndexedMap (\p tile -> viewTileAt model p tile) model.tiles)
+
+
 view : Model -> Html Msg
-view { screen, tiles } =
+view model =
     svg
         [ viewBox
             ("0 0 "
-                ++ String.fromFloat screen.width
+                ++ String.fromFloat model.screen.width
                 ++ " "
-                ++ String.fromFloat screen.height
+                ++ String.fromFloat model.screen.height
             )
         , width "100%"
         , height "100%"
         ]
-        (concat (tilesIndexedMap (\p tile -> viewTileAt screen p tile) tiles))
+        (viewTiles model)
 
 
 tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
@@ -167,10 +198,10 @@ isHoveringTile : Screen -> Position -> Position -> Bool
 isHoveringTile screen (Pos mouseX mouseY) (Pos tileX tileY) =
     let
         screenX =
-            screenPosition tileX screen.width
+            tileToScreenPosition tileX screen.width
 
         screenY =
-            screenPosition tileY screen.height
+            tileToScreenPosition tileY screen.height
     in
     ((screenX <= mouseX) && (mouseX < (screenX + tileSize)))
         && ((screenY <= mouseY) && (mouseY < (screenY + tileSize)))
@@ -218,6 +249,7 @@ update msg model =
                                 tile
                         )
                         model.tiles
+                , bombs = List.map (\( x, y ) -> Pos (toFloat x) (toFloat y)) bombs
             }
     , Cmd.none
     )
