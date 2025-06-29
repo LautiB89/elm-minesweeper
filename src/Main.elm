@@ -84,8 +84,8 @@ type TileContent
     | Empty
 
 
-type Position
-    = Pos Float Float
+type alias Position =
+    { x : Float, y : Float }
 
 
 type Tile
@@ -108,14 +108,14 @@ type Msg
 
 
 baseTile : Position -> String -> Svg msg
-baseTile (Pos xPos yPos) colorStr =
+baseTile position colorStr =
     let
         sTileSize =
             fromFloat tileSize
     in
     rect
-        [ x (fromFloat xPos)
-        , y (fromFloat yPos)
+        [ x (fromFloat position.x)
+        , y (fromFloat position.y)
         , width sTileSize
         , height sTileSize
         , fill colorStr
@@ -124,16 +124,16 @@ baseTile (Pos xPos yPos) colorStr =
 
 
 neighbours : Position -> List Position
-neighbours (Pos x y) =
-    List.concatMap (\n -> List.map (\m -> Pos (x + n) (y + m)) [ -1, 0, 1 ])
+neighbours position =
+    List.concatMap (\n -> List.map (\m -> { x = position.x + n, y = position.y + m }) [ -1, 0, 1 ])
         [ -1, 0, 1 ]
 
 
 tileBombCount : Position -> Position -> List Position -> Svg Msg
-tileBombCount tilePosition (Pos screenXPos screenYPos) bombs =
+tileBombCount tilePosition screenPosition bombs =
     text_
-        [ x (String.fromFloat (screenXPos + (tileSize / 2)))
-        , y (String.fromFloat (screenYPos + (tileSize / 2)))
+        [ x (String.fromFloat (screenPosition.x + (tileSize / 2)))
+        , y (String.fromFloat (screenPosition.y + (tileSize / 2)))
         , textAnchor "middle"
         , dominantBaseline "central"
         , fontSize "16"
@@ -167,14 +167,13 @@ tileToScreenPosition k screenSize =
 
 
 viewTileAt : Model -> Position -> Tile -> Svg Msg
-viewTileAt { screen, bombs } (Pos i j) tile =
+viewTileAt { screen, bombs } tilePosition tile =
     viewTile tile
         bombs
-        (Pos i j)
-        (Pos
-            (tileToScreenPosition i screen.width)
-            (tileToScreenPosition j screen.height)
-        )
+        tilePosition
+        { x = tileToScreenPosition tilePosition.x screen.width
+        , y = tileToScreenPosition tilePosition.y screen.height
+        }
 
 
 view : Model -> Html Msg
@@ -194,7 +193,11 @@ view model =
 
 tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
 tilesIndexedMap f tileMap =
-    indexedMap (\x tiles -> indexedMap (\y -> f (Pos (toFloat x) (toFloat y))) tiles) tileMap
+    indexedMap
+        (\x tiles ->
+            indexedMap (\y -> f { x = toFloat x, y = toFloat y }) tiles
+        )
+        tileMap
 
 
 coordIsHoveringTile : Float -> Float -> Int -> Bool
@@ -247,7 +250,7 @@ update msg model =
             { model
                 | tiles =
                     tilesIndexedMap
-                        (\(Pos x y) tile ->
+                        (\{ x, y } tile ->
                             if member ( round x, round y ) bombs then
                                 case tile of
                                     Revealed _ ->
@@ -260,7 +263,7 @@ update msg model =
                                 tile
                         )
                         model.tiles
-                , bombs = List.map (\( x, y ) -> Pos (toFloat x) (toFloat y)) bombs
+                , bombs = List.map (\( x, y ) -> { x = toFloat x, y = toFloat y }) bombs
             }
     , Cmd.none
     )
