@@ -11,3 +11,4 @@
 - Probar de usar Arrays en vez de Lists (o alguna otra estructura más optima)
 - Usar records para Position
 - Re-generar las bombas en caso de iniciar el juego en una bomba (o generar el juego apenas empieza)
+- Bug: se puede generar una bomba afuera del tablero
