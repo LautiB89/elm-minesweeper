@@ -143,6 +143,7 @@ tileBombCount tilePosition screenPosition bombs =
         , SvgAttr.fontSize (String.fromFloat (tileSize / 2))
         , SvgAttr.fontFamily "monospace"
         , SvgAttr.fill "white"
+        , SvgAttr.pointerEvents "none"
         ]
         [ text (String.fromInt (List.length (List.filter (\p -> member p bombs) (neighbours tilePosition)))) ]
 
