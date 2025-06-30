@@ -3,14 +3,15 @@ module Main exposing (..)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events exposing (onClick)
-import Debug exposing (toString)
-import Html exposing (Html)
+import Html exposing (Html, div)
+import Html.Attributes as HtmlAttr
+import Html.Events exposing (preventDefaultOn)
 import Json.Decode
 import List exposing (concat, indexedMap, member, repeat)
 import Random
 import String exposing (fromFloat)
 import Svg exposing (..)
-import Svg.Attributes exposing (..)
+import Svg.Attributes as SvgAttr
 import Task
 
 
@@ -21,7 +22,7 @@ defaultSize =
 
 tileSize : number
 tileSize =
-    40
+    50
 
 
 tileSpacing : number
@@ -36,6 +37,10 @@ defaultBombCount =
 
 type alias Screen =
     { height : Float, width : Float }
+
+
+type alias Position =
+    { x : Float, y : Float }
 
 
 type alias Model =
@@ -84,13 +89,10 @@ type TileContent
     | Empty
 
 
-type alias Position =
-    { x : Float, y : Float }
-
-
 type Tile
     = Revealed TileContent
     | Hidden TileContent
+    | Flagged TileContent
 
 
 type alias TileMap =
@@ -99,6 +101,7 @@ type alias TileMap =
 
 type Msg
     = MouseClick Float Float
+    | RightClick Float Float
     | GotViewport Dom.Viewport
     | GeneratedBombs (List ( Int, Int ))
 
@@ -114,31 +117,32 @@ baseTile position colorStr =
             fromFloat tileSize
     in
     rect
-        [ x (fromFloat position.x)
-        , y (fromFloat position.y)
-        , width sTileSize
-        , height sTileSize
-        , fill colorStr
+        [ SvgAttr.x (fromFloat position.x)
+        , SvgAttr.y (fromFloat position.y)
+        , SvgAttr.width sTileSize
+        , SvgAttr.height sTileSize
+        , SvgAttr.fill colorStr
         ]
         []
 
 
 neighbours : Position -> List Position
 neighbours position =
-    List.concatMap (\n -> List.map (\m -> { x = position.x + n, y = position.y + m }) [ -1, 0, 1 ])
+    List.concatMap
+        (\n -> List.map (\m -> { x = position.x + n, y = position.y + m }) [ -1, 0, 1 ])
         [ -1, 0, 1 ]
 
 
 tileBombCount : Position -> Position -> List Position -> Svg Msg
 tileBombCount tilePosition screenPosition bombs =
     text_
-        [ x (String.fromFloat (screenPosition.x + (tileSize / 2)))
-        , y (String.fromFloat (screenPosition.y + (tileSize / 2)))
-        , textAnchor "middle"
-        , dominantBaseline "central"
-        , fontSize "16"
-        , fontFamily "monospace"
-        , fill "white"
+        [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
+        , SvgAttr.y (String.fromFloat (screenPosition.y + (tileSize / 2)))
+        , SvgAttr.textAnchor "middle"
+        , SvgAttr.dominantBaseline "central"
+        , SvgAttr.fontSize (String.fromFloat (tileSize / 2))
+        , SvgAttr.fontFamily "monospace"
+        , SvgAttr.fill "white"
         ]
         [ text (String.fromInt (List.length (List.filter (\p -> member p bombs) (neighbours tilePosition)))) ]
 
@@ -156,6 +160,9 @@ viewTile tile bombs tilePosition screenPosition =
                         [ baseTile screenPosition "grey"
                         , tileBombCount tilePosition screenPosition bombs
                         ]
+
+        Flagged _ ->
+            baseTile screenPosition "brown"
 
         Hidden _ ->
             baseTile screenPosition "darkGrey"
@@ -178,17 +185,23 @@ viewTileAt { screen, bombs } tilePosition tile =
 
 view : Model -> Html Msg
 view model =
-    svg
-        [ viewBox
-            ("0 0 "
-                ++ String.fromFloat model.screen.width
-                ++ " "
-                ++ String.fromFloat model.screen.height
-            )
-        , width "100%"
-        , height "100%"
+    div
+        [ onRightClick
+        , HtmlAttr.style "width" "100vw"
+        , HtmlAttr.style "height" "100vh"
         ]
-        (concat (tilesIndexedMap (viewTileAt model) model.tiles))
+        [ svg
+            [ SvgAttr.viewBox
+                ("0 0 "
+                    ++ String.fromFloat model.screen.width
+                    ++ " "
+                    ++ String.fromFloat model.screen.height
+                )
+            , SvgAttr.width "100%"
+            , SvgAttr.height "100%"
+            ]
+            (concat (tilesIndexedMap (viewTileAt model) model.tiles))
+        ]
 
 
 tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
@@ -213,34 +226,63 @@ coordIsHoveringTile aux mouseCoordinate tileCoordinate =
 -- UPDATE
 
 
+transformClickedTileBy : Model -> Float -> Float -> (Tile -> Tile) -> TileMap
+transformClickedTileBy model mouseX mouseY t =
+    indexedMap
+        (\x tiles ->
+            if coordIsHoveringTile model.screen.width mouseX x then
+                indexedMap
+                    (\y tile ->
+                        if coordIsHoveringTile model.screen.height mouseY y then
+                            t tile
+
+                        else
+                            tile
+                    )
+                    tiles
+
+            else
+                tiles
+        )
+        model.tiles
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     ( case msg of
         MouseClick mouseX mouseY ->
             { model
                 | tiles =
-                    indexedMap
-                        (\x tiles ->
-                            if coordIsHoveringTile model.screen.width mouseX x then
-                                indexedMap
-                                    (\y tile ->
-                                        case tile of
-                                            Revealed _ ->
-                                                tile
+                    transformClickedTileBy model
+                        mouseX
+                        mouseY
+                        (\tile ->
+                            case tile of
+                                Hidden c ->
+                                    Revealed c
 
-                                            Hidden c ->
-                                                if coordIsHoveringTile model.screen.height mouseY y then
-                                                    Revealed c
-
-                                                else
-                                                    tile
-                                    )
-                                    tiles
-
-                            else
-                                tiles
+                                _ ->
+                                    tile
                         )
-                        model.tiles
+            }
+
+        RightClick mouseX mouseY ->
+            { model
+                | tiles =
+                    transformClickedTileBy model
+                        mouseX
+                        mouseY
+                        (\tile ->
+                            case tile of
+                                Revealed _ ->
+                                    tile
+
+                                Hidden c ->
+                                    Flagged c
+
+                                Flagged c ->
+                                    Hidden c
+                        )
             }
 
         GotViewport { viewport } ->
@@ -259,6 +301,9 @@ update msg model =
                                     Hidden _ ->
                                         Hidden Bomb
 
+                                    Flagged _ ->
+                                        Flagged Bomb
+
                             else
                                 tile
                         )
@@ -271,6 +316,15 @@ update msg model =
 
 
 -- SUBSCRIPTIONS
+
+
+onRightClick : Html.Attribute Msg
+onRightClick =
+    preventDefaultOn "contextmenu"
+        (Json.Decode.map2 (\x y -> ( RightClick x y, True ))
+            (Json.Decode.field "pageX" Json.Decode.float)
+            (Json.Decode.field "pageY" Json.Decode.float)
+        )
 
 
 subscriptions : Model -> Sub Msg
