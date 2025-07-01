@@ -151,8 +151,8 @@ tileNumber tilePosition bombs =
     List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
 
 
-tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg Msg
-tileBombCount tilePosition screenPosition bombs =
+tileText : ScreenPosition -> String -> Maybe String -> Svg Msg
+tileText screenPosition value color =
     text_
         [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
         , SvgAttr.y (String.fromFloat (screenPosition.y + (tileSize / 2)))
@@ -160,11 +160,14 @@ tileBombCount tilePosition screenPosition bombs =
         , SvgAttr.dominantBaseline "central"
         , SvgAttr.fontSize (String.fromFloat (tileSize / 2))
         , SvgAttr.fontFamily "monospace"
-        , SvgAttr.fill "white"
+        , SvgAttr.fill (Maybe.withDefault "white" color )
         , SvgAttr.pointerEvents "none"
         ]
-        [ text (String.fromInt (tileNumber tilePosition bombs)) ]
+        [ text value ]
 
+tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg Msg
+tileBombCount tilePosition screenPosition bombs =
+    tileText screenPosition (String.fromInt (tileNumber tilePosition bombs)) Nothing
 
 viewTile : Tile -> List TilePosition -> TilePosition -> ScreenPosition -> Svg Msg
 viewTile tile bombs tilePosition screenPosition =
@@ -181,7 +184,10 @@ viewTile tile bombs tilePosition screenPosition =
                         ]
 
         Flagged _ ->
-            baseTile screenPosition "brown"
+                    g []
+                        [ baseTile screenPosition "brown"
+                        , tileText screenPosition "|>" (Just "yellow")
+                        ]
 
         Hidden _ ->
             baseTile screenPosition "darkGrey"
@@ -272,17 +278,6 @@ view model =
             ]
             (List.filterMap (viewTileAt model) positions)
         ]
-
-
-coordIsHoveringTile : Float -> Float -> Int -> Bool
-coordIsHoveringTile aux mouseCoordinate tileCoordinate =
-    let
-        screenCoordinate =
-            tileToScreenPosition tileCoordinate aux
-    in
-    (screenCoordinate <= mouseCoordinate) && (mouseCoordinate < (screenCoordinate + tileSize))
-
-
 
 -- UPDATE
 
