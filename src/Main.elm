@@ -44,12 +44,12 @@ type alias TilePosition =
     ( Int, Int )
 
 
-type alias Position =
+type alias ScreenPosition =
     { x : Float, y : Float }
 
 
 type alias Model =
-    { tiles : TileMap, screen : Screen, bombs : List Position }
+    { tiles : TileMap, screen : Screen, bombs : List TilePosition }
 
 
 
@@ -64,7 +64,7 @@ init =
     }
 
 
-bombsGenerator : Random.Generator (List ( Int, Int ))
+bombsGenerator : Random.Generator (List TilePosition)
 bombsGenerator =
     Random.list defaultBombCount
         (Random.pair
@@ -102,21 +102,21 @@ type Tile
 
 
 type alias TileMap =
-    Dict ( Int, Int ) Tile
+    Dict TilePosition Tile
 
 
 type Msg
     = MouseClick Float Float
     | RightClick Float Float
     | GotViewport Dom.Viewport
-    | GeneratedBombs (List ( Int, Int ))
+    | GeneratedBombs (List TilePosition)
 
 
 
 -- VIEW
 
 
-baseTile : Position -> String -> Svg msg
+baseTile : ScreenPosition -> String -> Svg msg
 baseTile position colorStr =
     let
         sTileSize =
@@ -132,27 +132,27 @@ baseTile position colorStr =
         []
 
 
-neighbours : TilePosition -> List Position
+neighbours : TilePosition -> List TilePosition
 neighbours ( tileX, tileY ) =
     List.filter
-        (\{ x, y } ->
+        (\( x, y ) ->
             (0 <= x)
                 && (x < defaultSize)
                 && (0 <= y)
                 && (y < defaultSize)
         )
         (List.concatMap
-            (\n -> List.map (\m -> { x = toFloat (tileX + n), y = toFloat (tileY + m) }) [ -1, 0, 1 ])
+            (\n -> List.map (\m -> ( tileX + n, tileY + m )) [ -1, 0, 1 ])
             [ -1, 0, 1 ]
         )
 
 
-tileNumber : TilePosition -> List Position -> Int
+tileNumber : TilePosition -> List TilePosition -> Int
 tileNumber tilePosition bombs =
     List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
 
 
-tileBombCount : TilePosition -> Position -> List Position -> Svg Msg
+tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg Msg
 tileBombCount tilePosition screenPosition bombs =
     text_
         [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
@@ -167,7 +167,7 @@ tileBombCount tilePosition screenPosition bombs =
         [ text (String.fromInt (tileNumber tilePosition bombs)) ]
 
 
-viewTile : Tile -> List Position -> TilePosition -> Position -> Svg Msg
+viewTile : Tile -> List TilePosition -> TilePosition -> ScreenPosition -> Svg Msg
 viewTile tile bombs tilePosition screenPosition =
     case tile of
         Revealed content ->
@@ -216,7 +216,7 @@ screenToTileCoord k screenSize =
         Nothing
 
 
-screenToTilePosition : Position -> Screen -> Maybe TilePosition
+screenToTilePosition : ScreenPosition -> Screen -> Maybe TilePosition
 screenToTilePosition position screen =
     let
         xTileCoord =
@@ -245,7 +245,7 @@ viewTileAt { screen, bombs, tiles } position =
         (Dict.get position tiles)
 
 
-positions : List ( Int, Int )
+positions : List TilePosition
 positions =
     let
         coords =
@@ -314,7 +314,7 @@ flagTile tile =
             Hidden c
 
 
-updateModelTiles : Model -> (Tile -> Tile) -> Position -> Model
+updateModelTiles : Model -> (Tile -> Tile) -> ScreenPosition -> Model
 updateModelTiles model action mousePosition =
     let
         hoveredTilePosition =
@@ -337,10 +337,35 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         MouseClick mouseX mouseY ->
-            ( updateModelTiles model revealTile (Position mouseX mouseY), Cmd.none )
+            ( let
+                hoveredTilePosition =
+                    screenToTilePosition (ScreenPosition mouseX mouseY) model.screen
+              in
+              case hoveredTilePosition of
+                Nothing ->
+                    model
+
+                Just p ->
+                    if tileNumber p model.bombs == 0 then
+                        { model
+                            | tiles =
+                                Dict.update p
+                                    (Maybe.andThen (\tile -> Just (revealTile tile)))
+                                    model.tiles
+                        }
+
+                    else
+                        { model
+                            | tiles =
+                                Dict.update p
+                                    (Maybe.andThen (\tile -> Just (revealTile tile)))
+                                    model.tiles
+                        }
+            , Cmd.none
+            )
 
         RightClick mouseX mouseY ->
-            ( updateModelTiles model flagTile (Position mouseX mouseY), Cmd.none )
+            ( updateModelTiles model flagTile (ScreenPosition mouseX mouseY), Cmd.none )
 
         GotViewport { viewport } ->
             ( { model | screen = { height = viewport.height, width = viewport.width } }, Cmd.none )
