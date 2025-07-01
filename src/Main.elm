@@ -33,7 +33,7 @@ tileSpacing =
 
 defaultBombCount : number
 defaultBombCount =
-    20
+    10
 
 
 type alias Screen =
@@ -333,6 +333,37 @@ updateModelTiles model action mousePosition =
             }
 
 
+revealTileAndMaybeNeighbours : Model -> TilePosition -> Model
+revealTileAndMaybeNeighbours model position =
+    let
+        newModel =
+            { model
+                | tiles =
+                    Dict.update position
+                        (Maybe.andThen (\tile -> Just (revealTile tile)))
+                        model.tiles
+            }
+    in
+    if tileNumber position model.bombs > 0 then
+        newModel
+
+    else
+        List.foldr
+            (\x rec -> revealTileAndMaybeNeighbours rec x)
+            newModel
+            (List.filter
+                (\p ->
+                    case Dict.get p model.tiles of
+                        Just (Hidden _) ->
+                            True
+
+                        _ ->
+                            False
+                )
+                (neighbours position)
+            )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -346,21 +377,7 @@ update msg model =
                     model
 
                 Just p ->
-                    if tileNumber p model.bombs == 0 then
-                        { model
-                            | tiles =
-                                Dict.update p
-                                    (Maybe.andThen (\tile -> Just (revealTile tile)))
-                                    model.tiles
-                        }
-
-                    else
-                        { model
-                            | tiles =
-                                Dict.update p
-                                    (Maybe.andThen (\tile -> Just (revealTile tile)))
-                                    model.tiles
-                        }
+                    revealTileAndMaybeNeighbours model p
             , Cmd.none
             )
 
