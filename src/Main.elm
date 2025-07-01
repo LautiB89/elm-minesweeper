@@ -8,7 +8,7 @@ import Html exposing (Html, div)
 import Html.Attributes as HtmlAttr
 import Html.Events exposing (preventDefaultOn)
 import Json.Decode
-import List exposing (concat, indexedMap, member, repeat)
+import List exposing (member)
 import Random
 import String exposing (fromFloat)
 import Svg exposing (..)
@@ -67,7 +67,8 @@ init =
 bombsGenerator : Random.Generator (List ( Int, Int ))
 bombsGenerator =
     Random.list defaultBombCount
-        (Random.pair (Random.int 1 defaultSize)
+        (Random.pair
+            (Random.int 1 defaultSize)
             (Random.int 1 defaultSize)
         )
 
@@ -287,76 +288,62 @@ coordIsHoveringTile aux mouseCoordinate tileCoordinate =
 -- UPDATE
 
 
+revealTile : Tile -> Tile
+revealTile tile =
+    case tile of
+        Hidden c ->
+            Revealed c
+
+        Revealed _ ->
+            tile
+
+        Flagged _ ->
+            tile
+
+
+flagTile : Tile -> Tile
+flagTile tile =
+    case tile of
+        Revealed _ ->
+            tile
+
+        Hidden c ->
+            Flagged c
+
+        Flagged c ->
+            Hidden c
+
+
+updateModelTiles : Model -> (Tile -> Tile) -> Position -> Model
+updateModelTiles model action mousePosition =
+    let
+        hoveredTilePosition =
+            screenToTilePosition mousePosition model.screen
+    in
+    case hoveredTilePosition of
+        Nothing ->
+            model
+
+        Just p ->
+            { model
+                | tiles =
+                    Dict.update p
+                        (Maybe.andThen (\tile -> Just (action tile)))
+                        model.tiles
+            }
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         MouseClick mouseX mouseY ->
-            ( let
-                hoveredTilePosition =
-                    screenToTilePosition (Position mouseX mouseY) model.screen
-              in
-              case hoveredTilePosition of
-                Nothing ->
-                    model
-
-                Just p ->
-                    { model
-                        | tiles =
-                            Dict.update p
-                                (Maybe.andThen
-                                    (\tile ->
-                                        Just
-                                            (case tile of
-                                                Hidden c ->
-                                                    Revealed c
-
-                                                _ ->
-                                                    tile
-                                            )
-                                    )
-                                )
-                                model.tiles
-                    }
-            , Cmd.none
-            )
+            ( updateModelTiles model revealTile (Position mouseX mouseY), Cmd.none )
 
         RightClick mouseX mouseY ->
-            ( let
-                hoveredTilePosition =
-                    screenToTilePosition (Position mouseX mouseY) model.screen
-              in
-              case hoveredTilePosition of
-                Nothing ->
-                    model
-
-                Just p ->
-                    { model
-                        | tiles =
-                            Dict.update p
-                                (Maybe.andThen
-                                    (\tile ->
-                                        Just
-                                            (case tile of
-                                                Revealed _ ->
-                                                    tile
-
-                                                Hidden c ->
-                                                    Flagged c
-
-                                                Flagged c ->
-                                                    Hidden c
-                                            )
-                                    )
-                                )
-                                model.tiles
-                    }
-            , Cmd.none
-            )
+            ( updateModelTiles model flagTile (Position mouseX mouseY), Cmd.none )
 
         GotViewport { viewport } ->
-            ( { model | screen = { height = viewport.height, width = viewport.width } }
-            , Cmd.none
-            )
+            ( { model | screen = { height = viewport.height, width = viewport.width } }, Cmd.none )
 
         GeneratedBombs bombs ->
             ( { model
