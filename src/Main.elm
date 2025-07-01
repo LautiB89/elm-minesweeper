@@ -18,7 +18,7 @@ import Task
 
 defaultSize : number
 defaultSize =
-    10
+    15
 
 
 tileSize : number
@@ -28,12 +28,12 @@ tileSize =
 
 tileSpacing : number
 tileSpacing =
-    3
+    1
 
 
 defaultBombCount : number
 defaultBombCount =
-    10
+    defaultSize
 
 
 type alias Screen =
