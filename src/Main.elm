@@ -151,6 +151,40 @@ tileNumber tilePosition bombs =
     List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
 
 
+neighbourBombsNumberColor : Int -> Maybe String
+neighbourBombsNumberColor n =
+    case n of
+        0 ->
+            Just "lightGrey"
+
+        1 ->
+            Just "blue"
+
+        2 ->
+            Just "green"
+
+        3 ->
+            Just "red"
+
+        4 ->
+            Just "darkBlue"
+
+        5 ->
+            Just "brown"
+
+        6 ->
+            Just "cyan"
+
+        7 ->
+            Just "black"
+
+        8 ->
+            Just "lightGrey"
+
+        _ ->
+            Nothing
+
+
 tileText : ScreenPosition -> String -> Maybe String -> Svg Msg
 tileText screenPosition value color =
     text_
@@ -158,16 +192,22 @@ tileText screenPosition value color =
         , SvgAttr.y (String.fromFloat (screenPosition.y + (tileSize / 2)))
         , SvgAttr.textAnchor "middle"
         , SvgAttr.dominantBaseline "central"
-        , SvgAttr.fontSize (String.fromFloat (tileSize / 2))
+        , SvgAttr.fontSize (String.fromFloat (tileSize * 0.75))
         , SvgAttr.fontFamily "monospace"
-        , SvgAttr.fill (Maybe.withDefault "white" color )
+        , SvgAttr.fill (Maybe.withDefault "white" color)
         , SvgAttr.pointerEvents "none"
         ]
         [ text value ]
 
+
 tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg Msg
 tileBombCount tilePosition screenPosition bombs =
-    tileText screenPosition (String.fromInt (tileNumber tilePosition bombs)) Nothing
+    let
+        n =
+            tileNumber tilePosition bombs
+    in
+    tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
+
 
 viewTile : Tile -> List TilePosition -> TilePosition -> ScreenPosition -> Svg Msg
 viewTile tile bombs tilePosition screenPosition =
@@ -175,19 +215,22 @@ viewTile tile bombs tilePosition screenPosition =
         Revealed content ->
             case content of
                 Bomb ->
-                    baseTile screenPosition "red"
+                    g []
+                        [ baseTile screenPosition "darkRed"
+                        , tileText screenPosition "☠" (Just "white")
+                        ]
 
                 Empty ->
                     g []
-                        [ baseTile screenPosition "grey"
+                        [ baseTile screenPosition "lightGrey"
                         , tileBombCount tilePosition screenPosition bombs
                         ]
 
         Flagged _ ->
-                    g []
-                        [ baseTile screenPosition "brown"
-                        , tileText screenPosition "|>" (Just "yellow")
-                        ]
+            g []
+                [ baseTile screenPosition "grey"
+                , tileText screenPosition "🏳" (Just "white")
+                ]
 
         Hidden _ ->
             baseTile screenPosition "darkGrey"
@@ -279,6 +322,8 @@ view model =
             (List.filterMap (viewTileAt model) positions)
         ]
 
+
+
 -- UPDATE
 
 
@@ -330,7 +375,11 @@ updateModelTiles model action mousePosition =
 isEmptyWithNoNeighbourBombs : Model -> TilePosition -> Bool
 isEmptyWithNoNeighbourBombs model position =
     (tileNumber position model.bombs == 0)
-        && (Dict.get position model.tiles == Just (Hidden Empty)) -- FIXME: ugly
+        && (Dict.get position model.tiles == Just (Hidden Empty))
+
+
+
+-- FIXME: ugly
 
 
 revealTileAndMaybeNeighbours : Model -> TilePosition -> Model
