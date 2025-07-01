@@ -134,13 +134,12 @@ baseTile position colorStr =
 
 neighbours : TilePosition -> List TilePosition
 neighbours ( tileX, tileY ) =
+    let
+        validTileCoordinate =
+            between 0 defaultSize
+    in
     List.filter
-        (\( x, y ) ->
-            (0 <= x)
-                && (x < defaultSize)
-                && (0 <= y)
-                && (y < defaultSize)
-        )
+        (\( x, y ) -> validTileCoordinate x && validTileCoordinate y && (( x, y ) /= ( tileX, tileY )))
         (List.concatMap
             (\n -> List.map (\m -> ( tileX + n, tileY + m )) [ -1, 0, 1 ])
             [ -1, 0, 1 ]
@@ -333,6 +332,12 @@ updateModelTiles model action mousePosition =
             }
 
 
+isEmptyWithNoNeighbourBombs : Model -> TilePosition -> Bool
+isEmptyWithNoNeighbourBombs model position =
+    (tileNumber position model.bombs == 0)
+        && (Dict.get position model.tiles == Just (Hidden Empty)) -- FIXME: ugly
+
+
 revealTileAndMaybeNeighbours : Model -> TilePosition -> Model
 revealTileAndMaybeNeighbours model position =
     let
@@ -344,10 +349,7 @@ revealTileAndMaybeNeighbours model position =
                         model.tiles
             }
     in
-    if tileNumber position model.bombs > 0 then
-        newModel
-
-    else
+    if isEmptyWithNoNeighbourBombs model position then
         List.foldr
             (\x rec -> revealTileAndMaybeNeighbours rec x)
             newModel
@@ -362,6 +364,9 @@ revealTileAndMaybeNeighbours model position =
                 )
                 (neighbours position)
             )
+
+    else
+        newModel
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
