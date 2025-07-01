@@ -372,7 +372,8 @@ update msg model =
 
         GeneratedBombs bombs ->
             ( { model
-                | tiles =
+                | bombs = bombs
+                , tiles =
                     List.foldr
                         (\bombPosition dict ->
                             Dict.update bombPosition
@@ -395,7 +396,6 @@ update msg model =
                         )
                         model.tiles
                         bombs
-                , bombs = List.map (\( x, y ) -> { x = toFloat x, y = toFloat y }) bombs
               }
             , Cmd.none
             )
