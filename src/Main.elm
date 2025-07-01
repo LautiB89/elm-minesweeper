@@ -3,6 +3,7 @@ module Main exposing (..)
 import Browser
 import Browser.Dom as Dom
 import Browser.Events exposing (onClick)
+import Dict exposing (Dict)
 import Html exposing (Html, div)
 import Html.Attributes as HtmlAttr
 import Html.Events exposing (preventDefaultOn)
@@ -17,12 +18,12 @@ import Task
 
 defaultSize : number
 defaultSize =
-    15
+    10
 
 
 tileSize : number
 tileSize =
-    50
+    45
 
 
 tileSpacing : number
@@ -39,6 +40,10 @@ type alias Screen =
     { height : Float, width : Float }
 
 
+type alias TilePosition =
+    ( Int, Int )
+
+
 type alias Position =
     { x : Float, y : Float }
 
@@ -53,7 +58,7 @@ type alias Model =
 
 init : Model
 init =
-    { tiles = repeat defaultSize (repeat defaultSize (Hidden Empty))
+    { tiles = Dict.fromList (List.map (\p -> ( p, Hidden Empty )) positions)
     , bombs = []
     , screen = { height = 0, width = 0 }
     }
@@ -96,7 +101,7 @@ type Tile
 
 
 type alias TileMap =
-    List (List Tile)
+    Dict ( Int, Int ) Tile
 
 
 type Msg
@@ -126,14 +131,27 @@ baseTile position colorStr =
         []
 
 
-neighbours : Position -> List Position
-neighbours position =
-    List.concatMap
-        (\n -> List.map (\m -> { x = position.x + n, y = position.y + m }) [ -1, 0, 1 ])
-        [ -1, 0, 1 ]
+neighbours : TilePosition -> List Position
+neighbours ( tileX, tileY ) =
+    List.filter
+        (\{ x, y } ->
+            (0 <= x)
+                && (x < defaultSize)
+                && (0 <= y)
+                && (y < defaultSize)
+        )
+        (List.concatMap
+            (\n -> List.map (\m -> { x = toFloat (tileX + n), y = toFloat (tileY + m) }) [ -1, 0, 1 ])
+            [ -1, 0, 1 ]
+        )
 
 
-tileBombCount : Position -> Position -> List Position -> Svg Msg
+tileNumber : TilePosition -> List Position -> Int
+tileNumber tilePosition bombs =
+    List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
+
+
+tileBombCount : TilePosition -> Position -> List Position -> Svg Msg
 tileBombCount tilePosition screenPosition bombs =
     text_
         [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
@@ -145,10 +163,10 @@ tileBombCount tilePosition screenPosition bombs =
         , SvgAttr.fill "white"
         , SvgAttr.pointerEvents "none"
         ]
-        [ text (String.fromInt (List.length (List.filter (\p -> member p bombs) (neighbours tilePosition)))) ]
+        [ text (String.fromInt (tileNumber tilePosition bombs)) ]
 
 
-viewTile : Tile -> List Position -> Position -> Position -> Svg Msg
+viewTile : Tile -> List Position -> TilePosition -> Position -> Svg Msg
 viewTile tile bombs tilePosition screenPosition =
     case tile of
         Revealed content ->
@@ -169,19 +187,70 @@ viewTile tile bombs tilePosition screenPosition =
             baseTile screenPosition "darkGrey"
 
 
-tileToScreenPosition : Float -> Float -> Float
+boardOffset : Float -> Float
+boardOffset screenSize =
+    (screenSize / 2) - ((defaultSize / 2) * (tileSize + tileSpacing))
+
+
+tileToScreenPosition : Int -> Float -> Float
 tileToScreenPosition k screenSize =
-    k * (tileSize + tileSpacing) + ((screenSize / 2) - ((defaultSize / 2) * (tileSize + tileSpacing)))
+    toFloat k * (tileSize + tileSpacing) + boardOffset screenSize
 
 
-viewTileAt : Model -> Position -> Tile -> Svg Msg
-viewTileAt { screen, bombs } tilePosition tile =
-    viewTile tile
-        bombs
-        tilePosition
-        { x = tileToScreenPosition tilePosition.x screen.width
-        , y = tileToScreenPosition tilePosition.y screen.height
-        }
+between : number -> number -> number -> Bool
+between lo hi x =
+    lo <= x && x < hi
+
+
+screenToTileCoord : Float -> Float -> Maybe Int
+screenToTileCoord k screenSize =
+    let
+        offset =
+            boardOffset screenSize
+    in
+    if between offset (offset + screenSize) k then
+        Just (round (k - offset) // (tileSize + tileSpacing))
+
+    else
+        Nothing
+
+
+screenToTilePosition : Position -> Screen -> Maybe TilePosition
+screenToTilePosition position screen =
+    let
+        xTileCoord =
+            screenToTileCoord position.x screen.width
+
+        yTileCoord =
+            screenToTileCoord position.y screen.height
+    in
+    Maybe.andThen (\x -> Maybe.andThen (\y -> Just ( x, y )) yTileCoord) xTileCoord
+
+
+viewTileAt : Model -> TilePosition -> Maybe (Svg Msg)
+viewTileAt { screen, bombs, tiles } position =
+    Maybe.andThen
+        (\tile ->
+            Just
+                (viewTile
+                    tile
+                    bombs
+                    position
+                    { x = tileToScreenPosition (Tuple.first position) screen.width
+                    , y = tileToScreenPosition (Tuple.second position) screen.height
+                    }
+                )
+        )
+        (Dict.get position tiles)
+
+
+positions : List ( Int, Int )
+positions =
+    let
+        coords =
+            List.range 0 (defaultSize - 1)
+    in
+    List.concatMap (\x -> List.map (\y -> ( x, y )) coords) coords
 
 
 view : Model -> Html Msg
@@ -201,24 +270,15 @@ view model =
             , SvgAttr.width "100%"
             , SvgAttr.height "100%"
             ]
-            (concat (tilesIndexedMap (viewTileAt model) model.tiles))
+            (List.filterMap (viewTileAt model) positions)
         ]
-
-
-tilesIndexedMap : (Position -> Tile -> b) -> TileMap -> List (List b)
-tilesIndexedMap f tileMap =
-    indexedMap
-        (\x tiles ->
-            indexedMap (\y -> f { x = toFloat x, y = toFloat y }) tiles
-        )
-        tileMap
 
 
 coordIsHoveringTile : Float -> Float -> Int -> Bool
 coordIsHoveringTile aux mouseCoordinate tileCoordinate =
     let
         screenCoordinate =
-            tileToScreenPosition (toFloat tileCoordinate) aux
+            tileToScreenPosition tileCoordinate aux
     in
     (screenCoordinate <= mouseCoordinate) && (mouseCoordinate < (screenCoordinate + tileSize))
 
@@ -227,92 +287,106 @@ coordIsHoveringTile aux mouseCoordinate tileCoordinate =
 -- UPDATE
 
 
-transformClickedTileBy : Model -> Float -> Float -> (Tile -> Tile) -> TileMap
-transformClickedTileBy model mouseX mouseY t =
-    indexedMap
-        (\x tiles ->
-            if coordIsHoveringTile model.screen.width mouseX x then
-                indexedMap
-                    (\y tile ->
-                        if coordIsHoveringTile model.screen.height mouseY y then
-                            t tile
-
-                        else
-                            tile
-                    )
-                    tiles
-
-            else
-                tiles
-        )
-        model.tiles
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( case msg of
+    case msg of
         MouseClick mouseX mouseY ->
-            { model
-                | tiles =
-                    transformClickedTileBy model
-                        mouseX
-                        mouseY
-                        (\tile ->
-                            case tile of
-                                Hidden c ->
-                                    Revealed c
+            ( let
+                hoveredTilePosition =
+                    screenToTilePosition (Position mouseX mouseY) model.screen
+              in
+              case hoveredTilePosition of
+                Nothing ->
+                    model
 
-                                _ ->
-                                    tile
-                        )
-            }
+                Just p ->
+                    { model
+                        | tiles =
+                            Dict.update p
+                                (Maybe.andThen
+                                    (\tile ->
+                                        Just
+                                            (case tile of
+                                                Hidden c ->
+                                                    Revealed c
+
+                                                _ ->
+                                                    tile
+                                            )
+                                    )
+                                )
+                                model.tiles
+                    }
+            , Cmd.none
+            )
 
         RightClick mouseX mouseY ->
-            { model
-                | tiles =
-                    transformClickedTileBy model
-                        mouseX
-                        mouseY
-                        (\tile ->
-                            case tile of
-                                Revealed _ ->
-                                    tile
+            ( let
+                hoveredTilePosition =
+                    screenToTilePosition (Position mouseX mouseY) model.screen
+              in
+              case hoveredTilePosition of
+                Nothing ->
+                    model
 
-                                Hidden c ->
-                                    Flagged c
+                Just p ->
+                    { model
+                        | tiles =
+                            Dict.update p
+                                (Maybe.andThen
+                                    (\tile ->
+                                        Just
+                                            (case tile of
+                                                Revealed _ ->
+                                                    tile
 
-                                Flagged c ->
-                                    Hidden c
-                        )
-            }
+                                                Hidden c ->
+                                                    Flagged c
+
+                                                Flagged c ->
+                                                    Hidden c
+                                            )
+                                    )
+                                )
+                                model.tiles
+                    }
+            , Cmd.none
+            )
 
         GotViewport { viewport } ->
-            { model | screen = { height = viewport.height, width = viewport.width } }
+            ( { model | screen = { height = viewport.height, width = viewport.width } }
+            , Cmd.none
+            )
 
         GeneratedBombs bombs ->
-            { model
+            ( { model
                 | tiles =
-                    tilesIndexedMap
-                        (\{ x, y } tile ->
-                            if member ( round x, round y ) bombs then
-                                case tile of
-                                    Revealed _ ->
-                                        Revealed Bomb
+                    List.foldr
+                        (\bombPosition dict ->
+                            Dict.update bombPosition
+                                (Maybe.andThen
+                                    (\tile ->
+                                        Just
+                                            (case tile of
+                                                Revealed _ ->
+                                                    Revealed Bomb
 
-                                    Hidden _ ->
-                                        Hidden Bomb
+                                                Hidden _ ->
+                                                    Hidden Bomb
 
-                                    Flagged _ ->
-                                        Flagged Bomb
-
-                            else
-                                tile
+                                                Flagged _ ->
+                                                    Flagged Bomb
+                                            )
+                                    )
+                                )
+                                dict
                         )
                         model.tiles
+                        bombs
                 , bombs = List.map (\( x, y ) -> { x = toFloat x, y = toFloat y }) bombs
-            }
-    , Cmd.none
-    )
+              }
+            , Cmd.none
+            )
 
 
 
