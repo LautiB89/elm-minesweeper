@@ -1,8 +1,6 @@
 module StartScreen exposing
     ( Model(..)
     , Msg(..)
-    , init
-    , update
     , view
     )
 
@@ -19,18 +17,8 @@ type Model
     = Waiting
 
 
-init : Model
-init =
-    Waiting
-
-
-update : a -> b -> c -> c
-update events msg model =
-    model
-
-
 view : Model -> Html Msg
-view model =
+view _ =
     div
         [ style "width" "420px", style "max-width" "100%" ]
         [ button [ onClick StartGame ] [ text "Jugar" ] ]

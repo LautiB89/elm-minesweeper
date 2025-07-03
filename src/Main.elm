@@ -1,25 +1,14 @@
 module Main exposing (..)
 
 import Browser
-import Browser.Dom as Dom
-import Browser.Events exposing (onClick)
 import Dict exposing (Dict)
-import Html exposing (Html, div)
+import Html exposing (Html, div, h1, text)
 import Html.Attributes as HtmlAttr
-import Html.Events exposing (preventDefaultOn)
-import Json.Decode
 import Random
-import Screen exposing (Screen, ScreenPosition)
 import StartScreen
-import Svg exposing (..)
+import Svg exposing (Svg, svg)
 import Svg.Attributes as SvgAttr
-import Task
 import Tile
-
-
-tileSpacing : number
-tileSpacing =
-    1
 
 
 defaultBombCount : number
@@ -28,7 +17,7 @@ defaultBombCount =
 
 
 type alias GameState =
-    { tiles : TileMap, screen : Screen, bombs : List Tile.TilePosition }
+    { tiles : TileMap, bombs : List Tile.TilePosition }
 
 
 type Model
@@ -57,14 +46,7 @@ bombsGenerator =
 main : Program () Model Msg
 main =
     Browser.element
-        { init =
-            \_ ->
-                ( init
-                , Cmd.batch
-                    [ Task.perform GotViewport Dom.getViewport
-                    , Random.generate GeneratedBombs bombsGenerator
-                    ]
-                )
+        { init = \_ -> ( init, Cmd.none )
         , view = view
         , update = update
         , subscriptions = subscriptions
@@ -77,9 +59,8 @@ type alias TileMap =
 
 type Msg
     = StartGame
-    | MouseClick Float Float
-    | RightClick Float Float
-    | GotViewport Dom.Viewport
+    | RevealTile Tile.TilePosition
+    | FlagTile Tile.TilePosition
     | GeneratedBombs (List Tile.TilePosition)
 
 
@@ -87,48 +68,13 @@ type Msg
 -- VIEW
 
 
-boardOffset : Float -> Float
-boardOffset screenSize =
-    (screenSize / 2) - ((Tile.defaultSize / 2) * (Tile.tileSize + tileSpacing))
-
-
-tileToScreenPosition : Int -> Float -> Float
-tileToScreenPosition k screenSize =
-    toFloat k * (Tile.tileSize + tileSpacing) + boardOffset screenSize
-
-
 between : number -> number -> number -> Bool
 between lo hi x =
     lo <= x && x < hi
 
 
-screenToTileCoord : Float -> Float -> Maybe Int
-screenToTileCoord k screenSize =
-    let
-        offset =
-            boardOffset screenSize
-    in
-    if between offset (offset + screenSize) k then
-        Just (round (k - offset) // (Tile.tileSize + tileSpacing))
-
-    else
-        Nothing
-
-
-screenToTilePosition : ScreenPosition -> Screen -> Maybe Tile.TilePosition
-screenToTilePosition position screen =
-    let
-        xTileCoord =
-            screenToTileCoord position.x screen.width
-
-        yTileCoord =
-            screenToTileCoord position.y screen.height
-    in
-    Maybe.andThen (\x -> Maybe.andThen (\y -> Just ( x, y )) yTileCoord) xTileCoord
-
-
 viewTileAt : GameState -> Tile.TilePosition -> Maybe (Svg Msg)
-viewTileAt { screen, bombs, tiles } position =
+viewTileAt { bombs, tiles } position =
     Maybe.andThen
         (\tile ->
             Just
@@ -136,9 +82,15 @@ viewTileAt { screen, bombs, tiles } position =
                     tile
                     bombs
                     position
-                    { x = tileToScreenPosition (Tuple.first position) screen.width
-                    , y = tileToScreenPosition (Tuple.second position) screen.height
-                    }
+                    |> Svg.map
+                        (\m ->
+                            case m of
+                                Tile.RevealTile p ->
+                                    RevealTile p
+
+                                Tile.FlagTile p ->
+                                    FlagTile p
+                        )
                 )
         )
         (Dict.get position tiles)
@@ -161,19 +113,20 @@ view model =
 
         Playing gameState ->
             div
-                [ onRightClick
-                , HtmlAttr.style "width" "100vw"
-                , HtmlAttr.style "height" "100vh"
+                [ HtmlAttr.style "display" "flex"
+                , HtmlAttr.style "flex-direction" "column"
+                , HtmlAttr.style "align-items" "center"
                 ]
-                [ svg
-                    [ SvgAttr.viewBox
+                [ h1 [] [ text "Minesweeper" ]
+                , svg
+                    [ SvgAttr.width (String.fromInt Tile.screenSize)
+                    , SvgAttr.height (String.fromInt Tile.screenSize)
+                    , SvgAttr.viewBox
                         ("0 0 "
-                            ++ String.fromFloat gameState.screen.width
+                            ++ String.fromInt Tile.screenSize
                             ++ " "
-                            ++ String.fromFloat gameState.screen.height
+                            ++ String.fromInt Tile.screenSize
                         )
-                    , SvgAttr.width "100%"
-                    , SvgAttr.height "100%"
                     ]
                     (List.filterMap (viewTileAt gameState) positions)
                 ]
@@ -183,33 +136,20 @@ view model =
 -- UPDATE
 
 
-updateGameTiles : GameState -> (Tile.Tile -> Tile.Tile) -> ScreenPosition -> GameState
-updateGameTiles game action mousePosition =
-    let
-        hoveredTilePosition =
-            screenToTilePosition mousePosition game.screen
-    in
-    case hoveredTilePosition of
-        Nothing ->
-            game
-
-        Just p ->
-            { game
-                | tiles =
-                    Dict.update p
-                        (Maybe.andThen (\tile -> Just (action tile)))
-                        game.tiles
-            }
+updateGameTiles : GameState -> (Tile.Tile -> Tile.Tile) -> Tile.TilePosition -> GameState
+updateGameTiles game action position =
+    { game
+        | tiles =
+            Dict.update position
+                (Maybe.andThen (\tile -> Just (action tile)))
+                game.tiles
+    }
 
 
 isEmptyWithNoNeighbourBombs : GameState -> Tile.TilePosition -> Bool
 isEmptyWithNoNeighbourBombs game position =
     (Tile.tileNumber position game.bombs == 0)
         && (Dict.get position game.tiles == Just (Tile.Hidden Tile.Empty))
-
-
-
--- FIXME: ugly
 
 
 revealTileAndMaybeNeighbours : GameState -> Tile.TilePosition -> GameState
@@ -246,18 +186,14 @@ revealTileAndMaybeNeighbours game position =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case model of
-        StartScreen m ->
+        StartScreen _ ->
             case msg of
                 StartGame ->
                     ( Playing
                         { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions)
                         , bombs = []
-                        , screen = { height = 0, width = 0 }
                         }
-                    , Cmd.batch
-                        [ Task.perform GotViewport Dom.getViewport
-                        , Random.generate GeneratedBombs bombsGenerator
-                        ]
+                    , Random.generate GeneratedBombs bombsGenerator
                     )
 
                 _ ->
@@ -268,25 +204,11 @@ update msg model =
                 StartGame ->
                     ( model, Cmd.none )
 
-                MouseClick mouseX mouseY ->
-                    ( let
-                        hoveredTilePosition =
-                            screenToTilePosition (ScreenPosition mouseX mouseY) game.screen
-                      in
-                      case hoveredTilePosition of
-                        Nothing ->
-                            Playing game
+                RevealTile p ->
+                    ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
 
-                        Just p ->
-                            Playing (revealTileAndMaybeNeighbours game p)
-                    , Cmd.none
-                    )
-
-                RightClick mouseX mouseY ->
-                    ( Playing (updateGameTiles game Tile.flagTile (ScreenPosition mouseX mouseY)), Cmd.none )
-
-                GotViewport { viewport } ->
-                    ( Playing { game | screen = { height = viewport.height, width = viewport.width } }, Cmd.none )
+                FlagTile p ->
+                    ( Playing (updateGameTiles game Tile.flagTile p), Cmd.none )
 
                 GeneratedBombs bombs ->
                     ( Playing
@@ -312,19 +234,6 @@ update msg model =
 -- SUBSCRIPTIONS
 
 
-onRightClick : Html.Attribute Msg
-onRightClick =
-    preventDefaultOn "contextmenu"
-        (Json.Decode.map2 (\x y -> ( RightClick x y, True ))
-            (Json.Decode.field "pageX" Json.Decode.float)
-            (Json.Decode.field "pageY" Json.Decode.float)
-        )
-
-
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    onClick
-        (Json.Decode.map2 MouseClick
-            (Json.Decode.field "pageX" Json.Decode.float)
-            (Json.Decode.field "pageY" Json.Decode.float)
-        )
+    Sub.none

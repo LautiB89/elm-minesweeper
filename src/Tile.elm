@@ -1,5 +1,6 @@
 module Tile exposing
-    ( Tile(..)
+    ( Msg(..)
+    , Tile(..)
     , TileContent(..)
     , TilePosition
     , defaultSize
@@ -7,16 +8,22 @@ module Tile exposing
     , neighbours
     , putBomb
     , revealTile
+    , screenSize
     , tileNumber
     , tileSize
     , viewTile
     )
 
+import Json.Decode
 import List exposing (member)
-import Screen exposing (ScreenPosition)
 import String exposing (fromFloat)
 import Svg exposing (Svg, g, rect, text, text_)
 import Svg.Attributes as SvgAttr
+import Svg.Events exposing (onClick, preventDefaultOn)
+
+
+type alias ScreenPosition =
+    ( Float, Float )
 
 
 type TileContent
@@ -34,6 +41,11 @@ type alias TilePosition =
     ( Int, Int )
 
 
+type Msg
+    = RevealTile TilePosition
+    | FlagTile TilePosition
+
+
 tileSize : number
 tileSize =
     45
@@ -42,6 +54,23 @@ tileSize =
 defaultSize : number
 defaultSize =
     15
+
+
+tileSpacing : number
+tileSpacing =
+    1
+
+
+screenSize : number
+screenSize =
+    defaultSize * (tileSize + tileSpacing)
+
+
+tileToScreenPosition : ( Int, Int ) -> ( Float, Float )
+tileToScreenPosition ( x, y ) =
+    ( toFloat x * (tileSize + tileSpacing)
+    , toFloat y * (tileSize + tileSpacing)
+    )
 
 
 revealTile : Tile -> Tile
@@ -118,14 +147,14 @@ neighbourBombsNumberColor n =
 
 
 baseTile : ScreenPosition -> String -> Svg msg
-baseTile position colorStr =
+baseTile ( x, y ) colorStr =
     let
         sTileSize =
             fromFloat tileSize
     in
     rect
-        [ SvgAttr.x (fromFloat position.x)
-        , SvgAttr.y (fromFloat position.y)
+        [ SvgAttr.x (fromFloat x)
+        , SvgAttr.y (fromFloat y)
         , SvgAttr.width sTileSize
         , SvgAttr.height sTileSize
         , SvgAttr.fill colorStr
@@ -134,10 +163,10 @@ baseTile position colorStr =
 
 
 tileText : ScreenPosition -> String -> Maybe String -> Svg msg
-tileText screenPosition value color =
+tileText ( x, y ) value color =
     text_
-        [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
-        , SvgAttr.y (String.fromFloat (screenPosition.y + (tileSize / 2)))
+        [ SvgAttr.x (String.fromFloat (x + (tileSize / 2)))
+        , SvgAttr.y (String.fromFloat (y + (tileSize / 2)))
         , SvgAttr.textAnchor "middle"
         , SvgAttr.dominantBaseline "central"
         , SvgAttr.fontSize (String.fromFloat (tileSize * 0.75))
@@ -185,8 +214,17 @@ tileBombCount tilePosition screenPosition bombs =
     tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
 
 
-viewTile : Tile -> List TilePosition -> TilePosition -> ScreenPosition -> Svg msg
-viewTile tile bombs tilePosition screenPosition =
+onRightClick : Msg -> Svg.Attribute Msg
+onRightClick msg =
+    preventDefaultOn "contextmenu" (Json.Decode.map (\msg1 -> ( msg1, True )) (Json.Decode.succeed msg))
+
+
+viewTile : Tile -> List TilePosition -> TilePosition -> Svg Msg
+viewTile tile bombs tilePosition =
+    let
+        screenPosition =
+            tileToScreenPosition tilePosition
+    in
     case tile of
         Revealed content ->
             case content of
@@ -203,10 +241,14 @@ viewTile tile bombs tilePosition screenPosition =
                         ]
 
         Flagged _ ->
-            g []
+            g [ onRightClick (FlagTile tilePosition) ]
                 [ baseTile screenPosition "grey"
                 , tileText screenPosition "🏳" (Just "white")
                 ]
 
         Hidden _ ->
-            baseTile screenPosition "darkGrey"
+            g
+                [ onRightClick (FlagTile tilePosition)
+                , onClick (RevealTile tilePosition)
+                ]
+                [ baseTile screenPosition "darkGrey" ]
