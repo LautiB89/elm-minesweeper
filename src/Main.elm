@@ -8,22 +8,13 @@ import Html exposing (Html, div)
 import Html.Attributes as HtmlAttr
 import Html.Events exposing (preventDefaultOn)
 import Json.Decode
-import List exposing (member)
 import Random
-import String exposing (fromFloat)
+import Screen exposing (Screen, ScreenPosition)
+import StartScreen
 import Svg exposing (..)
 import Svg.Attributes as SvgAttr
 import Task
-
-
-defaultSize : number
-defaultSize =
-    15
-
-
-tileSize : number
-tileSize =
-    45
+import Tile
 
 
 tileSpacing : number
@@ -33,23 +24,16 @@ tileSpacing =
 
 defaultBombCount : number
 defaultBombCount =
-    defaultSize
+    Tile.defaultSize
 
 
-type alias Screen =
-    { height : Float, width : Float }
+type alias GameState =
+    { tiles : TileMap, screen : Screen, bombs : List Tile.TilePosition }
 
 
-type alias TilePosition =
-    ( Int, Int )
-
-
-type alias ScreenPosition =
-    { x : Float, y : Float }
-
-
-type alias Model =
-    { tiles : TileMap, screen : Screen, bombs : List TilePosition }
+type Model
+    = StartScreen StartScreen.Model
+    | Playing GameState
 
 
 
@@ -58,18 +42,15 @@ type alias Model =
 
 init : Model
 init =
-    { tiles = Dict.fromList (List.map (\p -> ( p, Hidden Empty )) positions)
-    , bombs = []
-    , screen = { height = 0, width = 0 }
-    }
+    StartScreen StartScreen.Waiting
 
 
-bombsGenerator : Random.Generator (List TilePosition)
+bombsGenerator : Random.Generator (List Tile.TilePosition)
 bombsGenerator =
     Random.list defaultBombCount
         (Random.pair
-            (Random.int 1 defaultSize)
-            (Random.int 1 defaultSize)
+            (Random.int 1 Tile.defaultSize)
+            (Random.int 1 Tile.defaultSize)
         )
 
 
@@ -90,160 +71,30 @@ main =
         }
 
 
-type TileContent
-    = Bomb
-    | Empty
-
-
-type Tile
-    = Revealed TileContent
-    | Hidden TileContent
-    | Flagged TileContent
-
-
 type alias TileMap =
-    Dict TilePosition Tile
+    Dict Tile.TilePosition Tile.Tile
 
 
 type Msg
-    = MouseClick Float Float
+    = StartGame
+    | MouseClick Float Float
     | RightClick Float Float
     | GotViewport Dom.Viewport
-    | GeneratedBombs (List TilePosition)
+    | GeneratedBombs (List Tile.TilePosition)
 
 
 
 -- VIEW
 
 
-baseTile : ScreenPosition -> String -> Svg msg
-baseTile position colorStr =
-    let
-        sTileSize =
-            fromFloat tileSize
-    in
-    rect
-        [ SvgAttr.x (fromFloat position.x)
-        , SvgAttr.y (fromFloat position.y)
-        , SvgAttr.width sTileSize
-        , SvgAttr.height sTileSize
-        , SvgAttr.fill colorStr
-        ]
-        []
-
-
-neighbours : TilePosition -> List TilePosition
-neighbours ( tileX, tileY ) =
-    let
-        validTileCoordinate =
-            between 0 defaultSize
-    in
-    List.filter
-        (\( x, y ) -> validTileCoordinate x && validTileCoordinate y && (( x, y ) /= ( tileX, tileY )))
-        (List.concatMap
-            (\n -> List.map (\m -> ( tileX + n, tileY + m )) [ -1, 0, 1 ])
-            [ -1, 0, 1 ]
-        )
-
-
-tileNumber : TilePosition -> List TilePosition -> Int
-tileNumber tilePosition bombs =
-    List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
-
-
-neighbourBombsNumberColor : Int -> Maybe String
-neighbourBombsNumberColor n =
-    case n of
-        0 ->
-            Just "lightGrey"
-
-        1 ->
-            Just "blue"
-
-        2 ->
-            Just "green"
-
-        3 ->
-            Just "red"
-
-        4 ->
-            Just "darkBlue"
-
-        5 ->
-            Just "brown"
-
-        6 ->
-            Just "cyan"
-
-        7 ->
-            Just "black"
-
-        8 ->
-            Just "lightGrey"
-
-        _ ->
-            Nothing
-
-
-tileText : ScreenPosition -> String -> Maybe String -> Svg Msg
-tileText screenPosition value color =
-    text_
-        [ SvgAttr.x (String.fromFloat (screenPosition.x + (tileSize / 2)))
-        , SvgAttr.y (String.fromFloat (screenPosition.y + (tileSize / 2)))
-        , SvgAttr.textAnchor "middle"
-        , SvgAttr.dominantBaseline "central"
-        , SvgAttr.fontSize (String.fromFloat (tileSize * 0.75))
-        , SvgAttr.fontFamily "monospace"
-        , SvgAttr.fill (Maybe.withDefault "white" color)
-        , SvgAttr.pointerEvents "none"
-        ]
-        [ text value ]
-
-
-tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg Msg
-tileBombCount tilePosition screenPosition bombs =
-    let
-        n =
-            tileNumber tilePosition bombs
-    in
-    tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
-
-
-viewTile : Tile -> List TilePosition -> TilePosition -> ScreenPosition -> Svg Msg
-viewTile tile bombs tilePosition screenPosition =
-    case tile of
-        Revealed content ->
-            case content of
-                Bomb ->
-                    g []
-                        [ baseTile screenPosition "darkRed"
-                        , tileText screenPosition "☠" (Just "white")
-                        ]
-
-                Empty ->
-                    g []
-                        [ baseTile screenPosition "lightGrey"
-                        , tileBombCount tilePosition screenPosition bombs
-                        ]
-
-        Flagged _ ->
-            g []
-                [ baseTile screenPosition "grey"
-                , tileText screenPosition "🏳" (Just "white")
-                ]
-
-        Hidden _ ->
-            baseTile screenPosition "darkGrey"
-
-
 boardOffset : Float -> Float
 boardOffset screenSize =
-    (screenSize / 2) - ((defaultSize / 2) * (tileSize + tileSpacing))
+    (screenSize / 2) - ((Tile.defaultSize / 2) * (Tile.tileSize + tileSpacing))
 
 
 tileToScreenPosition : Int -> Float -> Float
 tileToScreenPosition k screenSize =
-    toFloat k * (tileSize + tileSpacing) + boardOffset screenSize
+    toFloat k * (Tile.tileSize + tileSpacing) + boardOffset screenSize
 
 
 between : number -> number -> number -> Bool
@@ -258,13 +109,13 @@ screenToTileCoord k screenSize =
             boardOffset screenSize
     in
     if between offset (offset + screenSize) k then
-        Just (round (k - offset) // (tileSize + tileSpacing))
+        Just (round (k - offset) // (Tile.tileSize + tileSpacing))
 
     else
         Nothing
 
 
-screenToTilePosition : ScreenPosition -> Screen -> Maybe TilePosition
+screenToTilePosition : ScreenPosition -> Screen -> Maybe Tile.TilePosition
 screenToTilePosition position screen =
     let
         xTileCoord =
@@ -276,12 +127,12 @@ screenToTilePosition position screen =
     Maybe.andThen (\x -> Maybe.andThen (\y -> Just ( x, y )) yTileCoord) xTileCoord
 
 
-viewTileAt : Model -> TilePosition -> Maybe (Svg Msg)
+viewTileAt : GameState -> Tile.TilePosition -> Maybe (Svg Msg)
 viewTileAt { screen, bombs, tiles } position =
     Maybe.andThen
         (\tile ->
             Just
-                (viewTile
+                (Tile.viewTile
                     tile
                     bombs
                     position
@@ -293,120 +144,99 @@ viewTileAt { screen, bombs, tiles } position =
         (Dict.get position tiles)
 
 
-positions : List TilePosition
+positions : List Tile.TilePosition
 positions =
     let
         coords =
-            List.range 0 (defaultSize - 1)
+            List.range 0 (Tile.defaultSize - 1)
     in
     List.concatMap (\x -> List.map (\y -> ( x, y )) coords) coords
 
 
 view : Model -> Html Msg
 view model =
-    div
-        [ onRightClick
-        , HtmlAttr.style "width" "100vw"
-        , HtmlAttr.style "height" "100vh"
-        ]
-        [ svg
-            [ SvgAttr.viewBox
-                ("0 0 "
-                    ++ String.fromFloat model.screen.width
-                    ++ " "
-                    ++ String.fromFloat model.screen.height
-                )
-            , SvgAttr.width "100%"
-            , SvgAttr.height "100%"
-            ]
-            (List.filterMap (viewTileAt model) positions)
-        ]
+    case model of
+        StartScreen _ ->
+            StartScreen.view StartScreen.Waiting |> Html.map (\_ -> StartGame)
+
+        Playing gameState ->
+            div
+                [ onRightClick
+                , HtmlAttr.style "width" "100vw"
+                , HtmlAttr.style "height" "100vh"
+                ]
+                [ svg
+                    [ SvgAttr.viewBox
+                        ("0 0 "
+                            ++ String.fromFloat gameState.screen.width
+                            ++ " "
+                            ++ String.fromFloat gameState.screen.height
+                        )
+                    , SvgAttr.width "100%"
+                    , SvgAttr.height "100%"
+                    ]
+                    (List.filterMap (viewTileAt gameState) positions)
+                ]
 
 
 
 -- UPDATE
 
 
-revealTile : Tile -> Tile
-revealTile tile =
-    case tile of
-        Hidden c ->
-            Revealed c
-
-        Revealed _ ->
-            tile
-
-        Flagged _ ->
-            tile
-
-
-flagTile : Tile -> Tile
-flagTile tile =
-    case tile of
-        Revealed _ ->
-            tile
-
-        Hidden c ->
-            Flagged c
-
-        Flagged c ->
-            Hidden c
-
-
-updateModelTiles : Model -> (Tile -> Tile) -> ScreenPosition -> Model
-updateModelTiles model action mousePosition =
+updateGameTiles : GameState -> (Tile.Tile -> Tile.Tile) -> ScreenPosition -> GameState
+updateGameTiles game action mousePosition =
     let
         hoveredTilePosition =
-            screenToTilePosition mousePosition model.screen
+            screenToTilePosition mousePosition game.screen
     in
     case hoveredTilePosition of
         Nothing ->
-            model
+            game
 
         Just p ->
-            { model
+            { game
                 | tiles =
                     Dict.update p
                         (Maybe.andThen (\tile -> Just (action tile)))
-                        model.tiles
+                        game.tiles
             }
 
 
-isEmptyWithNoNeighbourBombs : Model -> TilePosition -> Bool
-isEmptyWithNoNeighbourBombs model position =
-    (tileNumber position model.bombs == 0)
-        && (Dict.get position model.tiles == Just (Hidden Empty))
+isEmptyWithNoNeighbourBombs : GameState -> Tile.TilePosition -> Bool
+isEmptyWithNoNeighbourBombs game position =
+    (Tile.tileNumber position game.bombs == 0)
+        && (Dict.get position game.tiles == Just (Tile.Hidden Tile.Empty))
 
 
 
 -- FIXME: ugly
 
 
-revealTileAndMaybeNeighbours : Model -> TilePosition -> Model
-revealTileAndMaybeNeighbours model position =
+revealTileAndMaybeNeighbours : GameState -> Tile.TilePosition -> GameState
+revealTileAndMaybeNeighbours game position =
     let
         newModel =
-            { model
+            { game
                 | tiles =
                     Dict.update position
-                        (Maybe.andThen (\tile -> Just (revealTile tile)))
-                        model.tiles
+                        (Maybe.andThen (\tile -> Just (Tile.revealTile tile)))
+                        game.tiles
             }
     in
-    if isEmptyWithNoNeighbourBombs model position then
+    if isEmptyWithNoNeighbourBombs game position then
         List.foldr
             (\x rec -> revealTileAndMaybeNeighbours rec x)
             newModel
             (List.filter
                 (\p ->
-                    case Dict.get p model.tiles of
-                        Just (Hidden _) ->
+                    case Dict.get p game.tiles of
+                        Just (Tile.Hidden _) ->
                             True
 
                         _ ->
                             False
                 )
-                (neighbours position)
+                (Tile.neighbours position)
             )
 
     else
@@ -415,56 +245,67 @@ revealTileAndMaybeNeighbours model position =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        MouseClick mouseX mouseY ->
-            ( let
-                hoveredTilePosition =
-                    screenToTilePosition (ScreenPosition mouseX mouseY) model.screen
-              in
-              case hoveredTilePosition of
-                Nothing ->
-                    model
+    case model of
+        StartScreen m ->
+            case msg of
+                StartGame ->
+                    ( Playing
+                        { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions)
+                        , bombs = []
+                        , screen = { height = 0, width = 0 }
+                        }
+                    , Cmd.batch
+                        [ Task.perform GotViewport Dom.getViewport
+                        , Random.generate GeneratedBombs bombsGenerator
+                        ]
+                    )
 
-                Just p ->
-                    revealTileAndMaybeNeighbours model p
-            , Cmd.none
-            )
+                _ ->
+                    ( model, Cmd.none )
 
-        RightClick mouseX mouseY ->
-            ( updateModelTiles model flagTile (ScreenPosition mouseX mouseY), Cmd.none )
+        Playing game ->
+            case msg of
+                StartGame ->
+                    ( model, Cmd.none )
 
-        GotViewport { viewport } ->
-            ( { model | screen = { height = viewport.height, width = viewport.width } }, Cmd.none )
+                MouseClick mouseX mouseY ->
+                    ( let
+                        hoveredTilePosition =
+                            screenToTilePosition (ScreenPosition mouseX mouseY) game.screen
+                      in
+                      case hoveredTilePosition of
+                        Nothing ->
+                            Playing game
 
-        GeneratedBombs bombs ->
-            ( { model
-                | bombs = bombs
-                , tiles =
-                    List.foldr
-                        (\bombPosition dict ->
-                            Dict.update bombPosition
-                                (Maybe.andThen
-                                    (\tile ->
-                                        Just
-                                            (case tile of
-                                                Revealed _ ->
-                                                    Revealed Bomb
+                        Just p ->
+                            Playing (revealTileAndMaybeNeighbours game p)
+                    , Cmd.none
+                    )
 
-                                                Hidden _ ->
-                                                    Hidden Bomb
+                RightClick mouseX mouseY ->
+                    ( Playing (updateGameTiles game Tile.flagTile (ScreenPosition mouseX mouseY)), Cmd.none )
 
-                                                Flagged _ ->
-                                                    Flagged Bomb
+                GotViewport { viewport } ->
+                    ( Playing { game | screen = { height = viewport.height, width = viewport.width } }, Cmd.none )
+
+                GeneratedBombs bombs ->
+                    ( Playing
+                        { game
+                            | bombs = bombs
+                            , tiles =
+                                List.foldr
+                                    (\bombPosition dict ->
+                                        Dict.update bombPosition
+                                            (Maybe.andThen
+                                                (\tile -> Just (Tile.putBomb tile))
                                             )
+                                            dict
                                     )
-                                )
-                                dict
-                        )
-                        model.tiles
-                        bombs
-              }
-            , Cmd.none
-            )
+                                    game.tiles
+                                    bombs
+                        }
+                    , Cmd.none
+                    )
 
 
 
@@ -481,7 +322,7 @@ onRightClick =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     onClick
         (Json.Decode.map2 MouseClick
             (Json.Decode.field "pageX" Json.Decode.float)
