@@ -185,9 +185,7 @@ update msg model =
             case msg of
                 StartGame ->
                     ( Playing
-                        { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions)
-                        , bombs = []
-                        }
+                        { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions), bombs = [] }
                     , Random.generate GeneratedBombs bombsGenerator
                     )
 
