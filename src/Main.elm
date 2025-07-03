@@ -102,18 +102,18 @@ positions =
 
 view : Model -> Html Msg
 view model =
-    case model of
-        StartScreen _ ->
-            StartScreen.view StartScreen.Waiting |> Html.map (\_ -> StartGame)
+    div
+        [ HtmlAttr.style "display" "flex"
+        , HtmlAttr.style "flex-direction" "column"
+        , HtmlAttr.style "align-items" "center"
+        ]
+        [ h1 [ HtmlAttr.style "fontFamily" "monospace" ] [ text "Minesweeper" ]
+        , case model of
+            StartScreen _ ->
+                StartScreen.view StartScreen.Waiting |> Html.map (\_ -> StartGame)
 
-        Playing gameState ->
-            div
-                [ HtmlAttr.style "display" "flex"
-                , HtmlAttr.style "flex-direction" "column"
-                , HtmlAttr.style "align-items" "center"
-                ]
-                [ h1 [] [ text "Minesweeper" ]
-                , svg
+            Playing gameState ->
+                svg
                     [ SvgAttr.width (String.fromInt Tile.screenSize)
                     , SvgAttr.height (String.fromInt Tile.screenSize)
                     , SvgAttr.viewBox
@@ -124,7 +124,7 @@ view model =
                         )
                     ]
                     (List.filterMap (viewTileAt gameState) positions)
-                ]
+        ]
 
 
 
