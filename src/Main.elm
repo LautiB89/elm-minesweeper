@@ -68,11 +68,6 @@ type Msg
 -- VIEW
 
 
-between : number -> number -> number -> Bool
-between lo hi x =
-    lo <= x && x < hi
-
-
 viewTileAt : GameState -> Tile.TilePosition -> Maybe (Svg Msg)
 viewTileAt { bombs, tiles } position =
     Maybe.andThen
