@@ -20,5 +20,14 @@ type Model
 view : Model -> Html Msg
 view _ =
     div
-        [ style "width" "420px", style "max-width" "100%" ]
-        [ button [ onClick StartGame ] [ text "Jugar" ] ]
+        [ style "display" "flex"
+        , style "flex-direction" "column"
+        , style "align-items" "center"
+        ]
+        [ button
+            [ onClick StartGame
+            , style "font-size" "20px"
+            , style "padding" "5px 15px"
+            ]
+            [ text "Jugar" ]
+        ]
