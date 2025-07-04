@@ -1,6 +1,8 @@
-# Elm Minesweeper
+# Minesweeper
 
-## ToDo
+Learning Elm by coding a game I really like.
+
+## To Do
 
 - Poder elegir tamaño y cantidad de bombas
 - Deploy Github pages

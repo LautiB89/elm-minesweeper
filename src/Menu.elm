@@ -29,5 +29,5 @@ view _ =
             , style "font-size" "20px"
             , style "padding" "5px 15px"
             ]
-            [ text "Jugar" ]
+            [ text "Start Game" ]
         ]

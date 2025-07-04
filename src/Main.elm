@@ -151,13 +151,13 @@ view model =
                         , HtmlAttr.style "fontFamily" "monospace"
                         , HtmlAttr.style "margin-bottom" "10px"
                         ]
-                        [ text "Perdiste" ]
+                        [ text "You Lost" ]
                     , button
                         [ onClick RestartGame
                         , HtmlAttr.style "font-size" "20px"
                         , HtmlAttr.style "padding" "5px 15px"
                         ]
-                        [ text "Reintentar" ]
+                        [ text "Back to Menu" ]
                     ]
         ]
 
