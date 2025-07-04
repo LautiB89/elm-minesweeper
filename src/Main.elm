@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, div, h1, text)
+import Html exposing (Html, div, h1, span, text)
 import Html.Attributes as HtmlAttr
 import Random
 import StartScreen
@@ -23,6 +23,7 @@ type alias GameState =
 type Model
     = StartScreen StartScreen.Model
     | Playing GameState
+    | Lost GameState
 
 
 
@@ -124,6 +125,32 @@ view model =
                         )
                     ]
                     (List.filterMap (viewTileAt gameState) positions)
+
+            Lost gameState ->
+                div
+                    [ HtmlAttr.style "display" "flex"
+                    , HtmlAttr.style "flex-direction" "column"
+                    , HtmlAttr.style "align-items" "center"
+                    ]
+                    [ svg
+                        [ SvgAttr.width (String.fromInt Tile.screenSize)
+                        , SvgAttr.height (String.fromInt Tile.screenSize)
+                        , SvgAttr.viewBox
+                            ("0 0 "
+                                ++ String.fromInt Tile.screenSize
+                                ++ " "
+                                ++ String.fromInt Tile.screenSize
+                            )
+                        , SvgAttr.opacity "0.5"
+                        ]
+                        (List.filterMap (viewTileAt gameState) positions)
+                    , span
+                        [ HtmlAttr.style "font-size" "20px"
+                        , HtmlAttr.style "font" "monospace"
+                        , HtmlAttr.style "margin-bottom" "10px"
+                        ]
+                        [ text "Perdiste" ]
+                    ]
         ]
 
 
@@ -198,7 +225,11 @@ update msg model =
                     ( model, Cmd.none )
 
                 RevealTile p ->
-                    ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
+                    if List.member p game.bombs then
+                        ( Lost (revealTileAndMaybeNeighbours game p), Cmd.none )
+
+                    else
+                        ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
 
                 FlagTile p ->
                     ( Playing (updateGameTiles game Tile.flagTile p), Cmd.none )
@@ -221,6 +252,9 @@ update msg model =
                         }
                     , Cmd.none
                     )
+
+        Lost _ ->
+            ( model, Cmd.none )
 
 
 
