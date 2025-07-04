@@ -15,7 +15,7 @@ import Utils exposing (listNub)
 
 
 type alias GameState =
-    { tiles : TileMap, bombs : List Position, size : ( Int, Int ) }
+    { size : ( Int, Int ), tiles : TileMap, bombs : List Position }
 
 
 type Model
@@ -48,8 +48,10 @@ bombAmountFromDifficulty difficulty =
 
 
 bombsGenerator : Size -> Int -> Random.Generator (List Position)
-bombsGenerator ( width, height ) n =
-    Random.list n (Random.pair (Random.int 0 (width - 1)) (Random.int 0 (height - 1)))
+bombsGenerator ( width, height ) amount =
+    Random.list
+        amount
+        (Random.pair (Random.int 0 (width - 1)) (Random.int 0 (height - 1)))
 
 
 main : Program () Model Msg
