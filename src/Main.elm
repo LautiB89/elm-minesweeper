@@ -333,11 +333,7 @@ update msg model =
             )
 
         ( Playing game, RevealTile p ) ->
-            if List.member p game.bombs then
-                ( Lost (revealTileAndMaybeNeighbours game p), Cmd.none )
-
-            else
-                ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
+            ( gameToModel (revealTileAndMaybeNeighbours game p), Cmd.none )
 
         ( Playing game, RevealNonFlaggedNeighbours p ) ->
             ( gameToModel (revealNonFlaggedNeighbours game p), Cmd.none )
