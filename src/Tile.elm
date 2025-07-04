@@ -47,7 +47,7 @@ type Msg
 
 size : number
 size =
-    30
+    40
 
 
 spacing : number
