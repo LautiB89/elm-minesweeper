@@ -16,7 +16,7 @@ module TileMap exposing
 
 import Dict exposing (Dict)
 import Menu
-import Tile exposing (Content(..), Position, Tile(..))
+import Tile exposing (Position, Tile)
 import Utils exposing (listCount)
 
 
@@ -30,7 +30,7 @@ type alias TileMap =
 
 empty : Size -> TileMap
 empty size =
-    { tiles = Dict.fromList (List.map (\p -> ( p, Hidden Empty )) (positions size))
+    { tiles = Dict.fromList (List.map (\p -> ( p, Tile.hiddenEmpty )) (positions size))
     , size = size
     }
 
@@ -167,7 +167,7 @@ revealNonFlaggedNeighbours tileMap position =
 
 isEmptyWithNoNeighbourBombs : TileMap -> Position -> Bool
 isEmptyWithNoNeighbourBombs tileMap position =
-    (get position tileMap == Just (Tile.Hidden Tile.Empty))
+    satisfiesAt (\tile -> Tile.isHidden tile && Tile.isEmpty tile) position tileMap
         && (countBombNeighbours tileMap position == 0)
 
 
@@ -190,16 +190,8 @@ revealTileAndMaybeNeighbours tileMap position =
 
 isRevealedWithAllFlags : TileMap -> Position -> Bool
 isRevealedWithAllFlags tileMap position =
-    let
-        bombCount : Int
-        bombCount =
-            countBombNeighbours tileMap position
-
-        flagsCount : Int
-        flagsCount =
-            countFlaggedNeighbours tileMap position
-    in
-    (bombCount == flagsCount) && (get position tileMap == Just (Tile.Revealed Tile.Empty))
+    (countBombNeighbours tileMap position == countFlaggedNeighbours tileMap position)
+        && satisfiesAt (\tile -> Tile.isRevealed tile && Tile.isEmpty tile) position tileMap
 
 
 hasRevealedBomb : TileMap -> Bool

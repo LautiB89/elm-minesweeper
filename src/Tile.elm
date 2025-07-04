@@ -1,11 +1,12 @@
 module Tile exposing
-    ( Content(..)
-    , Msg(..)
+    ( Msg(..)
     , Position
     , ScreenPosition
-    , Tile(..)
+    , Tile
     , flag
     , hasBomb
+    , hiddenEmpty
+    , isEmpty
     , isFlagged
     , isHidden
     , isRevealed
@@ -72,6 +73,15 @@ screenHeight ( _, height ) =
 tileToScreenPosition : ( Int, Int ) -> ( Float, Float )
 tileToScreenPosition ( x, y ) =
     ( toFloat x * (size + spacing), toFloat y * (size + spacing) )
+
+
+
+-- CREATE
+
+
+hiddenEmpty : Tile
+hiddenEmpty =
+    Hidden Empty
 
 
 
@@ -145,6 +155,22 @@ isFlagged : Tile -> Bool
 isFlagged tile =
     case tile of
         Flagged _ ->
+            True
+
+        _ ->
+            False
+
+
+isEmpty : Tile -> Bool
+isEmpty tile =
+    case tile of
+        Revealed Empty ->
+            True
+
+        Hidden Empty ->
+            True
+
+        Flagged Empty ->
             True
 
         _ ->

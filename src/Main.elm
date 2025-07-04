@@ -1,4 +1,9 @@
-module Main exposing (GameState, Model(..), Msg(..), main)
+module Main exposing
+    ( GameState
+    , Model(..)
+    , Msg(..)
+    , main
+    )
 
 import Browser
 import Html exposing (Html, button, div, h1, span, text)
