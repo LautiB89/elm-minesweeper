@@ -2,8 +2,9 @@ module Main exposing (..)
 
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, div, h1, span, text)
+import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes as HtmlAttr
+import Html.Events exposing (onClick)
 import Random
 import StartScreen
 import Svg exposing (Svg, svg)
@@ -60,6 +61,7 @@ type alias TileMap =
 
 type Msg
     = StartGame
+    | RestartGame
     | RevealTile Tile.TilePosition
     | FlagTile Tile.TilePosition
     | GeneratedBombs (List Tile.TilePosition)
@@ -150,6 +152,12 @@ view model =
                         , HtmlAttr.style "margin-bottom" "10px"
                         ]
                         [ text "Perdiste" ]
+                    , button
+                        [ onClick RestartGame
+                        , HtmlAttr.style "font-size" "20px"
+                        , HtmlAttr.style "padding" "5px 15px"
+                        ]
+                        [ text "Reintentar" ]
                     ]
         ]
 
@@ -207,53 +215,49 @@ revealTileAndMaybeNeighbours game position =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case model of
-        StartScreen _ ->
-            case msg of
-                StartGame ->
-                    ( Playing
-                        { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions), bombs = [] }
-                    , Random.generate GeneratedBombs bombsGenerator
-                    )
+    case ( model, msg ) of
+        ( StartScreen _, StartGame ) ->
+            ( Playing
+                { tiles = Dict.fromList (List.map (\p -> ( p, Tile.Hidden Tile.Empty )) positions), bombs = [] }
+            , Random.generate GeneratedBombs bombsGenerator
+            )
 
-                _ ->
-                    ( model, Cmd.none )
+        ( Playing _, StartGame ) ->
+            ( model, Cmd.none )
 
-        Playing game ->
-            case msg of
-                StartGame ->
-                    ( model, Cmd.none )
+        ( Playing game, RevealTile p ) ->
+            if List.member p game.bombs then
+                ( Lost (revealTileAndMaybeNeighbours game p), Cmd.none )
 
-                RevealTile p ->
-                    if List.member p game.bombs then
-                        ( Lost (revealTileAndMaybeNeighbours game p), Cmd.none )
+            else
+                ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
 
-                    else
-                        ( Playing (revealTileAndMaybeNeighbours game p), Cmd.none )
+        ( Playing game, FlagTile p ) ->
+            ( Playing (updateGameTiles game Tile.flagTile p), Cmd.none )
 
-                FlagTile p ->
-                    ( Playing (updateGameTiles game Tile.flagTile p), Cmd.none )
-
-                GeneratedBombs bombs ->
-                    ( Playing
-                        { game
-                            | bombs = bombs
-                            , tiles =
-                                List.foldr
-                                    (\bombPosition dict ->
-                                        Dict.update bombPosition
-                                            (Maybe.andThen
-                                                (\tile -> Just (Tile.putBomb tile))
-                                            )
-                                            dict
+        ( Playing game, GeneratedBombs bombs ) ->
+            ( Playing
+                { game
+                    | bombs = bombs
+                    , tiles =
+                        List.foldr
+                            (\bombPosition dict ->
+                                Dict.update bombPosition
+                                    (Maybe.andThen
+                                        (\tile -> Just (Tile.putBomb tile))
                                     )
-                                    game.tiles
-                                    bombs
-                        }
-                    , Cmd.none
-                    )
+                                    dict
+                            )
+                            game.tiles
+                            bombs
+                }
+            , Cmd.none
+            )
 
-        Lost _ ->
+        ( Lost _, RestartGame ) ->
+            ( StartScreen StartScreen.Waiting, Cmd.none )
+
+        _ ->
             ( model, Cmd.none )
 
 
