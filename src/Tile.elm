@@ -1,21 +1,18 @@
 module Tile exposing
-    ( Msg(..)
+    ( Content(..)
+    , Msg(..)
+    , Position
+    , ScreenPosition
     , Tile(..)
-    , TileContent(..)
-    , TilePosition
-    , defaultSize
-    , flagTile
-    , neighbours
+    , flag
     , putBomb
-    , revealTile
-    , screenSize
-    , tileNumber
-    , tileSize
+    , reveal
+    , screenHeight
+    , screenWidth
     , viewTile
     )
 
 import Json.Decode
-import List exposing (member)
 import String exposing (fromFloat)
 import Svg exposing (Svg, g, rect, text, text_)
 import Svg.Attributes as SvgAttr
@@ -26,55 +23,54 @@ type alias ScreenPosition =
     ( Float, Float )
 
 
-type TileContent
+type Content
     = Bomb
     | Empty
 
 
 type Tile
-    = Revealed TileContent
-    | Hidden TileContent
-    | Flagged TileContent
+    = Revealed Content
+    | Hidden Content
+    | Flagged Content
 
 
-type alias TilePosition =
+type alias Position =
     ( Int, Int )
 
 
 type Msg
-    = RevealTile TilePosition
-    | FlagTile TilePosition
+    = RevealTile Position
+    | RevealNonFlaggedNeighbours Position
+    | FlagTile Position
 
 
-tileSize : number
-tileSize =
-    45
+size : number
+size =
+    30
 
 
-defaultSize : number
-defaultSize =
-    15
-
-
-tileSpacing : number
-tileSpacing =
+spacing : number
+spacing =
     1
 
 
-screenSize : number
-screenSize =
-    defaultSize * (tileSize + tileSpacing)
+screenWidth : ( Int, Int ) -> Int
+screenWidth ( width, _ ) =
+    width * (size + spacing)
+
+
+screenHeight : ( Int, Int ) -> Int
+screenHeight ( _, height ) =
+    height * (size + spacing)
 
 
 tileToScreenPosition : ( Int, Int ) -> ( Float, Float )
 tileToScreenPosition ( x, y ) =
-    ( toFloat x * (tileSize + tileSpacing)
-    , toFloat y * (tileSize + tileSpacing)
-    )
+    ( toFloat x * (size + spacing), toFloat y * (size + spacing) )
 
 
-revealTile : Tile -> Tile
-revealTile tile =
+reveal : Tile -> Tile
+reveal tile =
     case tile of
         Hidden c ->
             Revealed c
@@ -86,8 +82,8 @@ revealTile tile =
             tile
 
 
-flagTile : Tile -> Tile
-flagTile tile =
+flag : Tile -> Tile
+flag tile =
     case tile of
         Revealed _ ->
             tile
@@ -110,6 +106,22 @@ putBomb tile =
 
         Flagged _ ->
             Flagged Bomb
+
+
+baseTile : ScreenPosition -> String -> Svg msg
+baseTile ( x, y ) colorStr =
+    let
+        sTileSize =
+            fromFloat size
+    in
+    rect
+        [ SvgAttr.x (fromFloat x)
+        , SvgAttr.y (fromFloat y)
+        , SvgAttr.width sTileSize
+        , SvgAttr.height sTileSize
+        , SvgAttr.fill colorStr
+        ]
+        []
 
 
 neighbourBombsNumberColor : Int -> Maybe String
@@ -146,30 +158,14 @@ neighbourBombsNumberColor n =
             Nothing
 
 
-baseTile : ScreenPosition -> String -> Svg msg
-baseTile ( x, y ) colorStr =
-    let
-        sTileSize =
-            fromFloat tileSize
-    in
-    rect
-        [ SvgAttr.x (fromFloat x)
-        , SvgAttr.y (fromFloat y)
-        , SvgAttr.width sTileSize
-        , SvgAttr.height sTileSize
-        , SvgAttr.fill colorStr
-        ]
-        []
-
-
-tileText : ScreenPosition -> String -> Maybe String -> Svg msg
+tileText : ScreenPosition -> String -> Maybe String -> Svg Msg
 tileText ( x, y ) value color =
     text_
-        [ SvgAttr.x (String.fromFloat (x + (tileSize / 2)))
-        , SvgAttr.y (String.fromFloat (y + (tileSize / 2)))
+        [ SvgAttr.x (String.fromFloat (x + (size / 2)))
+        , SvgAttr.y (String.fromFloat (y + (size / 2)))
         , SvgAttr.textAnchor "middle"
         , SvgAttr.dominantBaseline "central"
-        , SvgAttr.fontSize (String.fromFloat (tileSize * 0.75))
+        , SvgAttr.fontSize (String.fromFloat (size * 0.75))
         , SvgAttr.fontFamily "monospace"
         , SvgAttr.fill (Maybe.withDefault "white" color)
         , SvgAttr.pointerEvents "none"
@@ -177,50 +173,20 @@ tileText ( x, y ) value color =
         [ text value ]
 
 
-between : number -> number -> number -> Bool
-between lo hi x =
-    lo <= x && x < hi
-
-
-neighbours : TilePosition -> List TilePosition
-neighbours ( tileX, tileY ) =
-    let
-        validTileCoordinate =
-            between 0 defaultSize
-    in
-    List.filter
-        (\( x, y ) ->
-            validTileCoordinate x
-                && validTileCoordinate y
-                && (( x, y ) /= ( tileX, tileY ))
-        )
-        (List.concatMap
-            (\n -> List.map (\m -> ( tileX + n, tileY + m )) [ -1, 0, 1 ])
-            [ -1, 0, 1 ]
-        )
-
-
-tileNumber : TilePosition -> List TilePosition -> Int
-tileNumber tilePosition bombs =
-    List.length (List.filter (\p -> member p bombs) (neighbours tilePosition))
-
-
-tileBombCount : TilePosition -> ScreenPosition -> List TilePosition -> Svg msg
-tileBombCount tilePosition screenPosition bombs =
-    let
-        n =
-            tileNumber tilePosition bombs
-    in
+tileNeighbourBombs : Int -> ScreenPosition -> Svg Msg
+tileNeighbourBombs n screenPosition =
     tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
 
 
 onRightClick : Msg -> Svg.Attribute Msg
 onRightClick msg =
-    preventDefaultOn "contextmenu" (Json.Decode.map (\msg1 -> ( msg1, True )) (Json.Decode.succeed msg))
+    preventDefaultOn
+        "contextmenu"
+        (Json.Decode.succeed ((\msg1 -> ( msg1, True )) msg))
 
 
-viewTile : Tile -> List TilePosition -> TilePosition -> Svg Msg
-viewTile tile bombs tilePosition =
+viewTile : Tile -> Position -> (Position -> Int) -> Svg Msg
+viewTile tile tilePosition tileBombCount =
     let
         screenPosition =
             tileToScreenPosition tilePosition
@@ -235,9 +201,9 @@ viewTile tile bombs tilePosition =
                         ]
 
                 Empty ->
-                    g []
+                    g [ onClick (RevealNonFlaggedNeighbours tilePosition) ]
                         [ baseTile screenPosition "lightGrey"
-                        , tileBombCount tilePosition screenPosition bombs
+                        , tileNeighbourBombs (tileBombCount tilePosition) screenPosition
                         ]
 
         Flagged _ ->
