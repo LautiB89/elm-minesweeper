@@ -42,6 +42,7 @@ type Msg
     = RevealTile Position
     | RevealNonFlaggedNeighbours Position
     | FlagTile Position
+    | NoOp
 
 
 size : number
@@ -195,13 +196,16 @@ viewTile tile tilePosition tileBombCount =
         Revealed content ->
             case content of
                 Bomb ->
-                    g []
+                    g [ onRightClick NoOp ]
                         [ baseTile screenPosition "darkRed"
                         , tileText screenPosition "☠" (Just "white")
                         ]
 
                 Empty ->
-                    g [ onClick (RevealNonFlaggedNeighbours tilePosition) ]
+                    g
+                        [ onClick (RevealNonFlaggedNeighbours tilePosition)
+                        , onRightClick NoOp
+                        ]
                         [ baseTile screenPosition "lightGrey"
                         , tileNeighbourBombs (tileBombCount tilePosition) screenPosition
                         ]

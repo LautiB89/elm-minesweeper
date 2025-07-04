@@ -72,6 +72,7 @@ type Msg
     | FlagTile Position
     | RevealNonFlaggedNeighbours Position
     | GeneratedBombs (List Position)
+    | NoOp
 
 
 
@@ -95,6 +96,9 @@ viewTileAt { bombs, tiles, size } position =
 
                                 Tile.RevealNonFlaggedNeighbours p ->
                                     RevealNonFlaggedNeighbours p
+
+                                Tile.NoOp ->
+                                    NoOp
                         )
             )
 
