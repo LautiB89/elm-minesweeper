@@ -146,7 +146,7 @@ view model =
                         (List.filterMap (viewTileAt gameState) positions)
                     , span
                         [ HtmlAttr.style "font-size" "20px"
-                        , HtmlAttr.style "font" "monospace"
+                        , HtmlAttr.style "fontFamily" "monospace"
                         , HtmlAttr.style "margin-bottom" "10px"
                         ]
                         [ text "Perdiste" ]
