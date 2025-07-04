@@ -6,7 +6,7 @@ import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes as HtmlAttr
 import Html.Events exposing (onClick)
 import Random
-import StartScreen
+import Menu
 import Svg exposing (Svg, svg)
 import Svg.Attributes as SvgAttr
 import Tile
@@ -22,7 +22,7 @@ type alias GameState =
 
 
 type Model
-    = StartScreen StartScreen.Model
+    = StartScreen Menu.Model
     | Playing GameState
     | Lost GameState
 
@@ -33,7 +33,7 @@ type Model
 
 init : Model
 init =
-    StartScreen StartScreen.Waiting
+    StartScreen Menu.MainMenu
 
 
 bombsGenerator : Random.Generator (List Tile.TilePosition)
@@ -113,7 +113,7 @@ view model =
         [ h1 [ HtmlAttr.style "fontFamily" "monospace" ] [ text "Minesweeper" ]
         , case model of
             StartScreen _ ->
-                StartScreen.view StartScreen.Waiting |> Html.map (\_ -> StartGame)
+                Menu.view Menu.MainMenu |> Html.map (\_ -> StartGame)
 
             Playing gameState ->
                 svg
@@ -255,7 +255,7 @@ update msg model =
             )
 
         ( Lost _, RestartGame ) ->
-            ( StartScreen StartScreen.Waiting, Cmd.none )
+            ( StartScreen Menu.MainMenu, Cmd.none )
 
         _ ->
             ( model, Cmd.none )

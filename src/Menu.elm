@@ -1,4 +1,4 @@
-module StartScreen exposing
+module Menu exposing
     ( Model(..)
     , Msg(..)
     , view
@@ -14,7 +14,7 @@ type Msg
 
 
 type Model
-    = Waiting
+    = MainMenu
 
 
 view : Model -> Html Msg
