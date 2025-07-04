@@ -181,9 +181,7 @@ tileNeighbourBombs n screenPosition =
 
 onRightClick : Msg -> Svg.Attribute Msg
 onRightClick msg =
-    preventDefaultOn
-        "contextmenu"
-        (Json.Decode.succeed ((\msg1 -> ( msg1, True )) msg))
+    preventDefaultOn "contextmenu" (Json.Decode.succeed ( msg, True ))
 
 
 viewTile : Tile -> Position -> (Position -> Int) -> Svg Msg
