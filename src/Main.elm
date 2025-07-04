@@ -150,7 +150,9 @@ view model =
         , HtmlAttr.style "align-items" "center"
         ]
         [ h1
-            [ HtmlAttr.style "fontFamily" "monospace" ]
+            [ HtmlAttr.style "fontFamily" "monospace"
+            , HtmlAttr.style "font-size" "40px"
+            ]
             [ text "Minesweeper" ]
         , case model of
             MainMenu menu ->
