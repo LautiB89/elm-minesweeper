@@ -1,7 +1,7 @@
 module Menu exposing
-    ( Model(..)
+    ( GameDifficulty(..)
+    , Model(..)
     , Msg(..)
-    , GameDifficulty(..)
     , view
     )
 
@@ -30,7 +30,7 @@ baseButton : String -> Msg -> Html Msg
 baseButton label msg =
     button
         [ onClick msg
-        , style "font-size" "20px"
+        , style "font-size" "30px"
         , style "padding" "5px 15px"
         ]
         [ text label ]
@@ -40,7 +40,8 @@ view : Model -> Html Msg
 view model =
     div
         [ style "display" "flex"
-        , style "flex-direction" "column"
+        , style "flex-direction" "row"
+        , style "gap" "10px"
         , style "align-items" "center"
         ]
         (case model of
