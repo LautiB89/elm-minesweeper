@@ -30,6 +30,7 @@ type alias Size =
 positions : Size -> List Position
 positions ( width, height ) =
     let
+        coords : Int -> List Int
         coords =
             \size -> List.range 0 (size - 1)
     in

@@ -112,6 +112,7 @@ putBomb tile =
 baseTile : ScreenPosition -> String -> Svg msg
 baseTile ( x, y ) colorStr =
     let
+        sTileSize : String
         sTileSize =
             fromFloat size
     in
@@ -187,6 +188,7 @@ onRightClick msg =
 viewTile : Tile -> Position -> (Position -> Int) -> Svg Msg
 viewTile tile tilePosition tileBombCount =
     let
+        screenPosition : ScreenPosition
         screenPosition =
             tileToScreenPosition tilePosition
     in
