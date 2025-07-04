@@ -1,0 +1,217 @@
+module TileMap exposing
+    ( Size
+    , TileMap
+    , countBombNeighbours
+    , empty
+    , get
+    , hasRevealedBomb
+    , positions
+    , revealNonFlaggedNeighbours
+    , revealTileAndMaybeNeighbours
+    , revealedTiles
+    , sizeFromDifficulty
+    , totalTiles
+    , update
+    )
+
+import Dict exposing (Dict)
+import Menu
+import Tile exposing (Content(..), Position, Tile(..))
+import Utils exposing (listCount)
+
+
+type alias Size =
+    ( Int, Int )
+
+
+type alias TileMap =
+    { tiles : Dict Position Tile, size : Size }
+
+
+empty : Size -> TileMap
+empty size =
+    { tiles = Dict.fromList (List.map (\p -> ( p, Hidden Empty )) (positions size))
+    , size = size
+    }
+
+
+positions : Size -> List Position
+positions ( width, height ) =
+    let
+        coords : Int -> List Int
+        coords =
+            \size -> List.range 0 (size - 1)
+    in
+    List.concatMap (\x -> List.map (\y -> ( x, y )) (coords height)) (coords width)
+
+
+sizeFromDifficulty : Menu.GameDifficulty -> ( Int, Int )
+sizeFromDifficulty difficulty =
+    case difficulty of
+        Menu.Easy ->
+            ( 9, 9 )
+
+        Menu.Medium ->
+            ( 16, 16 )
+
+        Menu.Hard ->
+            ( 30, 16 )
+
+
+between : number -> number -> number -> Bool
+between lo hi x =
+    lo <= x && x < hi
+
+
+isValid : Size -> Position -> Bool
+isValid ( width, height ) ( x, y ) =
+    between 0 width x
+        && between 0 height y
+
+
+neighbours : Size -> Position -> List Position
+neighbours size ( tileX, tileY ) =
+    List.filter
+        (\( x, y ) -> isValid size ( x, y ) && (( x, y ) /= ( tileX, tileY )))
+        (List.concatMap
+            (\n -> List.map (\m -> ( tileX + n, tileY + m )) [ -1, 0, 1 ])
+            [ -1, 0, 1 ]
+        )
+
+
+filterNeighbours : (Tile -> Bool) -> TileMap -> Position -> List Position
+filterNeighbours p tileMap position =
+    List.filter
+        (\n ->
+            get n tileMap
+                |> Maybe.map p
+                |> Maybe.withDefault False
+        )
+        (neighbours tileMap.size position)
+
+
+countBombNeighbours : TileMap -> Position -> Int
+countBombNeighbours =
+    countNeighbours Tile.hasBomb
+
+
+countFlaggedNeighbours : TileMap -> Position -> Int
+countFlaggedNeighbours =
+    countNeighbours Tile.isFlagged
+
+
+countNeighbours : (Tile -> Bool) -> TileMap -> Position -> Int
+countNeighbours p tileMap centralPosition =
+    listCount
+        (\position ->
+            get position tileMap
+                |> Maybe.map p
+                |> Maybe.withDefault False
+        )
+        (neighbours tileMap.size centralPosition)
+
+
+satisfiesAt : (Tile -> Bool) -> Position -> TileMap -> Bool
+satisfiesAt p position { tiles } =
+    case Dict.get position tiles of
+        Just tile ->
+            p tile
+
+        Nothing ->
+            False
+
+
+get : Position -> TileMap -> Maybe Tile
+get position { size, tiles } =
+    if isValid size position then
+        Dict.get position tiles
+
+    else
+        Nothing
+
+
+update : Position -> (Maybe Tile -> Maybe Tile) -> TileMap -> TileMap
+update position f tileMap =
+    if isValid tileMap.size position then
+        { tileMap | tiles = Dict.update position f tileMap.tiles }
+
+    else
+        tileMap
+
+
+count : (Position -> Tile -> Bool) -> TileMap -> Int
+count p tileMap =
+    Dict.size (Dict.filter p tileMap.tiles)
+
+
+revealedTiles : TileMap -> Int
+revealedTiles tileMap =
+    count
+        (\_ tile -> not (Tile.isHidden tile) && not (Tile.hasBomb tile))
+        tileMap
+
+
+revealNonFlaggedNeighbours : TileMap -> Position -> TileMap
+revealNonFlaggedNeighbours tileMap position =
+    if isRevealedWithAllFlags tileMap position then
+        List.foldr (\x rec -> revealTileAndMaybeNeighbours rec x)
+            tileMap
+            (List.filter
+                (\p -> satisfiesAt Tile.isHidden p tileMap)
+                (neighbours tileMap.size position)
+            )
+
+    else
+        tileMap
+
+
+isEmptyWithNoNeighbourBombs : TileMap -> Position -> Bool
+isEmptyWithNoNeighbourBombs tileMap position =
+    (get position tileMap == Just (Tile.Hidden Tile.Empty))
+        && (countBombNeighbours tileMap position == 0)
+
+
+revealTileAndMaybeNeighbours : TileMap -> Position -> TileMap
+revealTileAndMaybeNeighbours tileMap position =
+    let
+        newTileMap : TileMap
+        newTileMap =
+            update position (Maybe.map Tile.reveal) tileMap
+    in
+    if isEmptyWithNoNeighbourBombs tileMap position then
+        List.foldr
+            (\x rec -> revealTileAndMaybeNeighbours rec x)
+            newTileMap
+            (filterNeighbours Tile.isHidden tileMap position)
+
+    else
+        newTileMap
+
+
+isRevealedWithAllFlags : TileMap -> Position -> Bool
+isRevealedWithAllFlags tileMap position =
+    let
+        bombCount : Int
+        bombCount =
+            countBombNeighbours tileMap position
+
+        flagsCount : Int
+        flagsCount =
+            countFlaggedNeighbours tileMap position
+    in
+    (bombCount == flagsCount) && (get position tileMap == Just (Tile.Revealed Tile.Empty))
+
+
+hasRevealedBomb : TileMap -> Bool
+hasRevealedBomb tileMap =
+    Dict.values tileMap.tiles
+        |> List.any (\tile -> Tile.isRevealed tile && Tile.hasBomb tile)
+
+
+totalTiles : TileMap -> Int
+totalTiles tileMap =
+    let
+        ( width, height ) =
+            tileMap.size
+    in
+    width * height

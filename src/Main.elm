@@ -1,21 +1,20 @@
 module Main exposing (GameState, Model(..), Msg(..), main)
 
 import Browser
-import Dict
 import Html exposing (Html, button, div, h1, span, text)
 import Html.Attributes as HtmlAttr
 import Html.Events exposing (onClick)
-import Map exposing (Size, TileMap, emptyTileMap, tileBombCount)
 import Menu
 import Random
 import Svg exposing (Svg, svg)
 import Svg.Attributes as SvgAttr
-import Tile exposing (Content(..), Position, Tile(..), viewTile)
+import Tile exposing (Position)
+import TileMap exposing (Size, TileMap, empty, hasRevealedBomb, totalTiles)
 import Utils exposing (listNub)
 
 
 type alias GameState =
-    { size : ( Int, Int ), tiles : TileMap, bombs : List Position }
+    { tileMap : TileMap, bombs : List Position }
 
 
 type Model
@@ -79,12 +78,28 @@ type Msg
 -- VIEW
 
 
-viewTileAt : GameState -> Position -> Maybe (Svg Msg)
-viewTileAt { bombs, tiles, size } position =
-    Dict.get position tiles
+viewTileMap : TileMap -> Maybe String -> Svg Msg
+viewTileMap tileMap opacity =
+    svg
+        [ SvgAttr.width (String.fromInt (Tile.screenWidth tileMap.size))
+        , SvgAttr.height (String.fromInt (Tile.screenHeight tileMap.size))
+        , SvgAttr.viewBox
+            ("0 0 "
+                ++ String.fromInt (Tile.screenWidth tileMap.size)
+                ++ " "
+                ++ String.fromInt (Tile.screenHeight tileMap.size)
+            )
+        , SvgAttr.opacity (Maybe.withDefault "1" opacity)
+        ]
+        (List.filterMap (\p -> viewTileAt p tileMap) (TileMap.positions tileMap.size))
+
+
+viewTileAt : Position -> TileMap -> Maybe (Svg Msg)
+viewTileAt position tileMap =
+    TileMap.get position tileMap
         |> Maybe.map
             (\tile ->
-                viewTile tile position (tileBombCount bombs size)
+                Tile.viewTile tile position (TileMap.countBombNeighbours tileMap position)
                     |> Svg.map
                         (\m ->
                             case m of
@@ -103,22 +118,6 @@ viewTileAt { bombs, tiles, size } position =
             )
 
 
-viewGameBoard : GameState -> Maybe String -> Svg Msg
-viewGameBoard gameState opacity =
-    svg
-        [ SvgAttr.width (String.fromInt (Tile.screenWidth gameState.size))
-        , SvgAttr.height (String.fromInt (Tile.screenHeight gameState.size))
-        , SvgAttr.viewBox
-            ("0 0 "
-                ++ String.fromInt (Tile.screenWidth gameState.size)
-                ++ " "
-                ++ String.fromInt (Tile.screenHeight gameState.size)
-            )
-        , SvgAttr.opacity (Maybe.withDefault "1" opacity)
-        ]
-        (List.filterMap (viewTileAt gameState) (Map.positions gameState.size))
-
-
 viewBlockedGameBoard : GameState -> String -> Html Msg
 viewBlockedGameBoard gameState label =
     div
@@ -126,7 +125,7 @@ viewBlockedGameBoard gameState label =
         , HtmlAttr.style "flex-direction" "column"
         , HtmlAttr.style "align-items" "center"
         ]
-        [ viewGameBoard gameState (Just "0.5")
+        [ viewTileMap gameState.tileMap (Just "0.5")
         , span
             [ HtmlAttr.style "font-size" "20px"
             , HtmlAttr.style "fontFamily" "monospace"
@@ -168,7 +167,7 @@ view model =
                         )
 
             Playing gameState ->
-                viewGameBoard gameState Nothing
+                viewTileMap gameState.tileMap Nothing
 
             Lost gameState ->
                 viewBlockedGameBoard gameState "You lost"
@@ -182,134 +181,21 @@ view model =
 -- UPDATE
 
 
-updateGameTiles : GameState -> (Tile.Tile -> Tile.Tile) -> Position -> GameState
-updateGameTiles game action position =
-    { game | tiles = Dict.update position (Maybe.map action) game.tiles }
-
-
-isEmptyWithNoNeighbourBombs : GameState -> Position -> Bool
-isEmptyWithNoNeighbourBombs { size, bombs, tiles } position =
-    (Dict.get position tiles == Just (Tile.Hidden Tile.Empty))
-        && (Map.tileBombCount bombs size position == 0)
-
-
-isRevealedWithAllFlags : GameState -> Position -> Bool
-isRevealedWithAllFlags { size, bombs, tiles } position =
+tileMapToModel : TileMap -> List Position -> Model
+tileMapToModel tileMap bombs =
     let
-        bombCount : Int
-        bombCount =
-            Map.tileBombCount bombs size position
-
-        flagsCount : Int
-        flagsCount =
-            List.length
-                (List.filter
-                    (\p ->
-                        case Dict.get p tiles of
-                            Just (Tile.Flagged _) ->
-                                True
-
-                            _ ->
-                                False
-                    )
-                    (Map.neighbours size position)
-                )
+        game : GameState
+        game =
+            { tileMap = tileMap, bombs = bombs }
     in
-    (bombCount == flagsCount)
-        && (Dict.get position tiles == Just (Tile.Revealed Tile.Empty))
-
-
-revealNonFlaggedNeighbours : GameState -> Position -> GameState
-revealNonFlaggedNeighbours game position =
-    if isRevealedWithAllFlags game position then
-        List.foldr (\x rec -> revealTileAndMaybeNeighbours rec x)
-            game
-            (List.filter
-                (\p ->
-                    case Dict.get p game.tiles of
-                        Just (Tile.Hidden _) ->
-                            True
-
-                        _ ->
-                            False
-                )
-                (Map.neighbours game.size position)
-            )
-
-    else
-        game
-
-
-revealedTiles : GameState -> Int
-revealedTiles game =
-    Dict.size
-        (Dict.filter
-            (\_ tile ->
-                case tile of
-                    Revealed Empty ->
-                        True
-
-                    _ ->
-                        False
-            )
-            game.tiles
-        )
-
-
-gameToModel : GameState -> Model
-gameToModel game =
-    if
-        List.any
-            (\b ->
-                case Dict.get b game.tiles of
-                    Just (Revealed Bomb) ->
-                        True
-
-                    _ ->
-                        False
-            )
-            game.bombs
-    then
+    if hasRevealedBomb tileMap then
         Lost game
 
-    else if
-        (revealedTiles game + List.length game.bombs)
-            == (Tuple.first game.size * Tuple.second game.size)
-    then
+    else if (TileMap.revealedTiles tileMap + List.length bombs) == totalTiles tileMap then
         Won game
 
     else
         Playing game
-
-
-revealTileAndMaybeNeighbours : GameState -> Position -> GameState
-revealTileAndMaybeNeighbours game position =
-    let
-        newGame : GameState
-        newGame =
-            { game
-                | tiles =
-                    Dict.update position (Maybe.map Tile.reveal) game.tiles
-            }
-    in
-    if isEmptyWithNoNeighbourBombs game position then
-        List.foldr
-            (\x rec -> revealTileAndMaybeNeighbours rec x)
-            newGame
-            (List.filter
-                (\p ->
-                    case Dict.get p game.tiles of
-                        Just (Tile.Hidden _) ->
-                            True
-
-                        _ ->
-                            False
-                )
-                (Map.neighbours game.size position)
-            )
-
-    else
-        newGame
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -326,20 +212,28 @@ update msg model =
 
                 size : Size
                 size =
-                    Map.sizeFromDifficulty difficulty
+                    TileMap.sizeFromDifficulty difficulty
             in
-            ( Playing { tiles = emptyTileMap size, bombs = [], size = size }
+            ( Playing { tileMap = empty size, bombs = [] }
             , Random.generate GeneratedBombs (bombsGenerator size bombAmount)
             )
 
         ( Playing game, RevealTile p ) ->
-            ( gameToModel (revealTileAndMaybeNeighbours game p), Cmd.none )
+            ( tileMapToModel
+                (TileMap.revealTileAndMaybeNeighbours game.tileMap p)
+                game.bombs
+            , Cmd.none
+            )
 
         ( Playing game, RevealNonFlaggedNeighbours p ) ->
-            ( gameToModel (revealNonFlaggedNeighbours game p), Cmd.none )
+            ( tileMapToModel
+                (TileMap.revealNonFlaggedNeighbours game.tileMap p)
+                game.bombs
+            , Cmd.none
+            )
 
         ( Playing game, FlagTile p ) ->
-            ( Playing (updateGameTiles game Tile.flag p), Cmd.none )
+            ( Playing { game | tileMap = TileMap.update p (Maybe.map Tile.flag) game.tileMap }, Cmd.none )
 
         ( Playing game, GeneratedBombs bombs ) ->
             ( Playing
@@ -350,14 +244,14 @@ update msg model =
                  in
                  { game
                     | bombs = nubBombs
-                    , tiles =
+                    , tileMap =
                         List.foldr
-                            (\bombPosition dict ->
-                                Dict.update bombPosition
+                            (\bombPosition rec ->
+                                TileMap.update bombPosition
                                     (Maybe.map Tile.putBomb)
-                                    dict
+                                    rec
                             )
-                            game.tiles
+                            game.tileMap
                             nubBombs
                  }
                 )

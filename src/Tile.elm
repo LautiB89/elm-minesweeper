@@ -5,6 +5,10 @@ module Tile exposing
     , ScreenPosition
     , Tile(..)
     , flag
+    , hasBomb
+    , isFlagged
+    , isHidden
+    , isRevealed
     , putBomb
     , reveal
     , screenHeight
@@ -70,6 +74,10 @@ tileToScreenPosition ( x, y ) =
     ( toFloat x * (size + spacing), toFloat y * (size + spacing) )
 
 
+
+-- TRANSFORM
+
+
 reveal : Tile -> Tile
 reveal tile =
     case tile of
@@ -107,6 +115,65 @@ putBomb tile =
 
         Flagged _ ->
             Flagged Bomb
+
+
+
+-- QUERY
+
+
+isHidden : Tile -> Bool
+isHidden tile =
+    case tile of
+        Hidden _ ->
+            True
+
+        _ ->
+            False
+
+
+isRevealed : Tile -> Bool
+isRevealed tile =
+    case tile of
+        Revealed _ ->
+            True
+
+        _ ->
+            False
+
+
+isFlagged : Tile -> Bool
+isFlagged tile =
+    case tile of
+        Flagged _ ->
+            True
+
+        _ ->
+            False
+
+
+hasBomb : Tile -> Bool
+hasBomb tile =
+    case tile of
+        Revealed Bomb ->
+            True
+
+        Hidden Bomb ->
+            True
+
+        Flagged Bomb ->
+            True
+
+        _ ->
+            False
+
+
+tileNeighbourBombs : Int -> ScreenPosition -> Svg Msg
+tileNeighbourBombs n screenPosition =
+    tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
+
+
+
+-- SVG
 
 
 baseTile : ScreenPosition -> String -> Svg msg
@@ -175,17 +242,12 @@ tileText ( x, y ) value color =
         [ text value ]
 
 
-tileNeighbourBombs : Int -> ScreenPosition -> Svg Msg
-tileNeighbourBombs n screenPosition =
-    tileText screenPosition (String.fromInt n) (neighbourBombsNumberColor n)
-
-
 onRightClick : Msg -> Svg.Attribute Msg
 onRightClick msg =
     preventDefaultOn "contextmenu" (Json.Decode.succeed ( msg, True ))
 
 
-viewTile : Tile -> Position -> (Position -> Int) -> Svg Msg
+viewTile : Tile -> Position -> Int -> Svg Msg
 viewTile tile tilePosition tileBombCount =
     let
         screenPosition : ScreenPosition
@@ -207,7 +269,7 @@ viewTile tile tilePosition tileBombCount =
                         , onRightClick NoOp
                         ]
                         [ baseTile screenPosition "lightGrey"
-                        , tileNeighbourBombs (tileBombCount tilePosition) screenPosition
+                        , tileNeighbourBombs tileBombCount screenPosition
                         ]
 
         Flagged _ ->
