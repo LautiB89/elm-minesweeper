@@ -55,24 +55,19 @@ size =
     40
 
 
-spacing : number
-spacing =
-    1
-
-
 screenWidth : ( Int, Int ) -> Int
 screenWidth ( width, _ ) =
-    width * (size + spacing)
+    width * size
 
 
 screenHeight : ( Int, Int ) -> Int
 screenHeight ( _, height ) =
-    height * (size + spacing)
+    height * size
 
 
 tileToScreenPosition : ( Int, Int ) -> ( Float, Float )
 tileToScreenPosition ( x, y ) =
-    ( toFloat x * (size + spacing), toFloat y * (size + spacing) )
+    ( toFloat x * size, toFloat y * size )
 
 
 
@@ -215,6 +210,9 @@ baseTile ( x, y ) colorStr =
         , SvgAttr.width sTileSize
         , SvgAttr.height sTileSize
         , SvgAttr.fill colorStr
+        , SvgAttr.stroke "#848484"
+        , SvgAttr.rx "3"
+        , SvgAttr.ry "3"
         ]
         []
 
@@ -226,28 +224,28 @@ neighbourBombsNumberColor n =
             Just "lightGrey"
 
         1 ->
-            Just "blue"
+            Just "#0000ff"
 
         2 ->
-            Just "green"
+            Just "#007b00"
 
         3 ->
-            Just "red"
+            Just "#ff0000"
 
         4 ->
-            Just "darkBlue"
+            Just "#00007b"
 
         5 ->
-            Just "brown"
+            Just "#7b0000"
 
         6 ->
-            Just "cyan"
+            Just "#008080"
 
         7 ->
-            Just "black"
+            Just "#000000"
 
         8 ->
-            Just "lightGrey"
+            Just "#808080"
 
         _ ->
             Nothing
@@ -309,4 +307,4 @@ viewTile tile tilePosition tileBombCount =
                 [ onRightClick (FlagTile tilePosition)
                 , onClick (RevealTile tilePosition)
                 ]
-                [ baseTile screenPosition "darkGrey" ]
+                [ baseTile screenPosition "#bdbdbd" ]
