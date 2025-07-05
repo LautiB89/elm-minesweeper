@@ -1,10 +1,10 @@
 module TileMap exposing
     ( Size
     , TileMap
+    , anyIsRevealed
     , countBombNeighbours
     , empty
     , get
-    , hasRevealedBomb
     , positions
     , revealNonFlaggedNeighbours
     , revealTileAndMaybeNeighbours
@@ -28,8 +28,13 @@ type alias TileMap =
     { tiles : Dict Position Tile, size : Size }
 
 
-empty : Size -> TileMap
-empty size =
+empty : Menu.GameDifficulty -> TileMap
+empty difficulty =
+    let
+        size : Size
+        size =
+            sizeFromDifficulty difficulty
+    in
     { tiles = Dict.fromList (List.map (\p -> ( p, Tile.hiddenEmpty )) (positions size))
     , size = size
     }
@@ -58,15 +63,10 @@ sizeFromDifficulty difficulty =
             ( 30, 16 )
 
 
-between : number -> number -> number -> Bool
-between lo hi x =
-    lo <= x && x < hi
-
-
 isValid : Size -> Position -> Bool
 isValid ( width, height ) ( x, y ) =
-    between 0 width x
-        && between 0 height y
+    (0 <= x && x < width)
+        && (0 <= y && y < height)
 
 
 neighbours : Size -> Position -> List Position
@@ -112,8 +112,8 @@ countNeighbours p tileMap centralPosition =
 
 
 satisfiesAt : (Tile -> Bool) -> Position -> TileMap -> Bool
-satisfiesAt p position { tiles } =
-    case Dict.get position tiles of
+satisfiesAt p position tileMap =
+    case get position tileMap of
         Just tile ->
             p tile
 
@@ -165,20 +165,19 @@ revealNonFlaggedNeighbours tileMap position =
         tileMap
 
 
-isEmptyWithNoNeighbourBombs : TileMap -> Position -> Bool
-isEmptyWithNoNeighbourBombs tileMap position =
-    satisfiesAt (\tile -> Tile.isHidden tile && Tile.isEmpty tile) position tileMap
-        && (countBombNeighbours tileMap position == 0)
-
-
 revealTileAndMaybeNeighbours : TileMap -> Position -> TileMap
 revealTileAndMaybeNeighbours tileMap position =
     let
         newTileMap : TileMap
         newTileMap =
             update position (Maybe.map Tile.reveal) tileMap
+
+        isEmptyWithNoNeighbourBombs : Bool
+        isEmptyWithNoNeighbourBombs =
+            satisfiesAt (\tile -> Tile.isHidden tile && Tile.isEmpty tile) position tileMap
+                && (countBombNeighbours tileMap position == 0)
     in
-    if isEmptyWithNoNeighbourBombs tileMap position then
+    if isEmptyWithNoNeighbourBombs then
         List.foldr
             (\x rec -> revealTileAndMaybeNeighbours rec x)
             newTileMap
@@ -194,10 +193,11 @@ isRevealedWithAllFlags tileMap position =
         && satisfiesAt (\tile -> Tile.isRevealed tile && Tile.isEmpty tile) position tileMap
 
 
-hasRevealedBomb : TileMap -> Bool
-hasRevealedBomb tileMap =
-    Dict.values tileMap.tiles
-        |> List.any (\tile -> Tile.isRevealed tile && Tile.hasBomb tile)
+anyIsRevealed : List Position -> TileMap -> Bool
+anyIsRevealed tilePositions tileMap =
+    List.any
+        (\p -> satisfiesAt (\tile -> Tile.isRevealed tile && Tile.hasBomb tile) p tileMap)
+        tilePositions
 
 
 totalTiles : TileMap -> Int

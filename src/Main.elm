@@ -11,11 +11,11 @@ import Html.Attributes as HtmlAttr
 import Html.Events exposing (onClick)
 import Menu
 import Random
+import Random.List as RandomList
 import Svg exposing (Svg, svg)
 import Svg.Attributes as SvgAttr
-import Tile exposing (Position)
-import TileMap exposing (Size, TileMap, empty, hasRevealedBomb, totalTiles)
-import Utils exposing (listNub)
+import Tile exposing (Position, reveal)
+import TileMap exposing (Size, TileMap, anyIsRevealed, totalTiles)
 
 
 type alias GameState =
@@ -24,6 +24,7 @@ type alias GameState =
 
 type Model
     = MainMenu Menu.Model
+    | FirstMove Menu.GameDifficulty
     | Playing GameState
     | Lost GameState
     | Won GameState
@@ -51,11 +52,15 @@ bombAmountFromDifficulty difficulty =
             99
 
 
-bombsGenerator : Size -> Int -> Random.Generator (List Position)
-bombsGenerator ( width, height ) amount =
-    Random.list
-        amount
-        (Random.pair (Random.int 0 (width - 1)) (Random.int 0 (height - 1)))
+bombsGenerator : Position -> Size -> Int -> Random.Generator (List Position)
+bombsGenerator initialPosition size amount =
+    let
+        positions : List Position
+        positions =
+            List.filter (\p -> p /= initialPosition) (TileMap.positions size)
+    in
+    RandomList.choices amount positions
+        |> Random.map Tuple.first
 
 
 main : Program () Model Msg
@@ -75,7 +80,7 @@ type Msg
     | RevealTile Position
     | FlagTile Position
     | RevealNonFlaggedNeighbours Position
-    | GeneratedBombs (List Position)
+    | ReGenerateBombsAndReveal Position (List Position)
     | NoOp
 
 
@@ -171,11 +176,22 @@ view model =
                                     ChooseDifficulty
                         )
 
+            FirstMove difficulty ->
+                viewTileMap (TileMap.empty difficulty) Nothing
+
             Playing gameState ->
                 viewTileMap gameState.tileMap Nothing
 
             Lost gameState ->
-                viewBlockedGameBoard gameState "You lost"
+                viewBlockedGameBoard
+                    { gameState
+                        | tileMap =
+                            List.foldr
+                                (\p rec -> TileMap.update p (\m -> Maybe.map reveal m) rec)
+                                gameState.tileMap
+                                gameState.bombs
+                    }
+                    "You lost"
 
             Won gameState ->
                 viewBlockedGameBoard gameState "You won!"
@@ -193,7 +209,7 @@ tileMapToModel tileMap bombs =
         game =
             { tileMap = tileMap, bombs = bombs }
     in
-    if hasRevealedBomb tileMap then
+    if anyIsRevealed game.bombs tileMap then
         Lost game
 
     else if (TileMap.revealedTiles tileMap + List.length bombs) == totalTiles tileMap then
@@ -210,17 +226,38 @@ update msg model =
             ( MainMenu Menu.ChoosingDifficulty, Cmd.none )
 
         ( MainMenu Menu.ChoosingDifficulty, StartGame difficulty ) ->
-            let
-                bombAmount : Int
-                bombAmount =
-                    bombAmountFromDifficulty difficulty
+            ( FirstMove difficulty, Cmd.none )
 
-                size : Size
-                size =
-                    TileMap.sizeFromDifficulty difficulty
-            in
-            ( Playing { tileMap = empty size, bombs = [] }
-            , Random.generate GeneratedBombs (bombsGenerator size bombAmount)
+        ( FirstMove difficulty, RevealTile p ) ->
+            ( FirstMove difficulty
+            , Random.generate
+                (ReGenerateBombsAndReveal p)
+                (bombsGenerator p
+                    (TileMap.sizeFromDifficulty difficulty)
+                    (bombAmountFromDifficulty difficulty)
+                )
+            )
+
+        ( FirstMove difficulty, ReGenerateBombsAndReveal p bombs ) ->
+            ( let
+                game : GameState
+                game =
+                    { bombs = bombs
+                    , tileMap =
+                        List.foldr
+                            (\bombPosition rec ->
+                                TileMap.update bombPosition
+                                    (Maybe.map Tile.putBomb)
+                                    rec
+                            )
+                            (TileMap.empty difficulty)
+                            bombs
+                    }
+              in
+              tileMapToModel
+                (TileMap.revealTileAndMaybeNeighbours game.tileMap p)
+                game.bombs
+            , Cmd.none
             )
 
         ( Playing game, RevealTile p ) ->
@@ -238,28 +275,8 @@ update msg model =
             )
 
         ( Playing game, FlagTile p ) ->
-            ( Playing { game | tileMap = TileMap.update p (Maybe.map Tile.flag) game.tileMap }, Cmd.none )
-
-        ( Playing game, GeneratedBombs bombs ) ->
             ( Playing
-                (let
-                    nubBombs : List Position
-                    nubBombs =
-                        listNub bombs
-                 in
-                 { game
-                    | bombs = nubBombs
-                    , tileMap =
-                        List.foldr
-                            (\bombPosition rec ->
-                                TileMap.update bombPosition
-                                    (Maybe.map Tile.putBomb)
-                                    rec
-                            )
-                            game.tileMap
-                            nubBombs
-                 }
-                )
+                { game | tileMap = TileMap.update p (Maybe.map Tile.flag) game.tileMap }
             , Cmd.none
             )
 

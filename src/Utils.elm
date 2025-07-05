@@ -1,12 +1,4 @@
-module Utils exposing
-    ( listCount
-    , listNub
-    )
-
-
-listNub : List comparable -> List comparable
-listNub =
-    List.foldr (\x rec -> x :: List.filter (\y -> x /= y) rec) []
+module Utils exposing (listCount)
 
 
 listCount : (a -> Bool) -> List a -> Int
